@@ -20,6 +20,7 @@ VP_H=10
 VP_X=5
 VP_Y=0
 STATUS_LINE=12
+INPUT_LINE=13
 
 ; GC: generation chance (1/(2^GC_XXX))
 ; CH: character
@@ -44,6 +45,17 @@ GROUND_CHAR=102
 	bne +
 	lda #.char
 	jmp donelbl
++
+}
+
+; .X contains the # of characters matched
+!macro STRCMP .src, .other {
+	ldx #$ff
+-	inx
+	lda .other,x
+	beq +
+	cmp .src,x
+	beq -
 +
 }
 
@@ -81,12 +93,84 @@ start
 	jsr drawui
 	jsr drawstatus
 	jsr genscreen
-	jmp *
+mainloop
+	jsr parsecmd
+	jmp mainloop
 
 ;**************************************
-; parse the player's command
+; get user input and parse the player's command
 parsecmd
+.input=SCREEN+SCREEN_W*INPUT_LINE
+.row=tmp0
+.col=tmp1
+	ldx #INPUT_LINE
+	ldy #0
+	jsr $fff0
+-	jsr $ffe4
+	tay
+	beq -
+
+	; clear the input line
+	lda #' '
+	ldx #10
+-	sta .input,x
+	dex
+	bpl -
+
+	cpy #'T'
+	bne +
+	ldx #<take
+	ldy #>take
+	bne .printaction
++	cpy #'H'
+	bne +
+	ldx #<hit
+	ldy #>hit
+	bne .printaction
++	jmp parsecmd	; invalid character
+
+.printaction
+	stx tmp0
+	sty tmp0+1
+	ldy #$00
+-	lda (tmp0),y
+	beq +
+	jsr $ffd2
+	iny
+	bne -
++	lda #' '
+	jsr $ffd2
+	lda #$80
+	eor .input
+	sta .input
+
+.getcoord
+	jsr $ffe4
+	cmp #'A'
+	bcc .getcoord
+	cmp #'A'+VP_W
+	bcs .getcoord
+	jsr $ffd2
+	sec
+	sbc #'A'
+	sta .col
+
+-	jsr $ffe4
+	cmp #'0'
+	bcc -
+	cmp #'9'+1
+	bcs -
+	jsr $ffd2
+	sec
+	sbc #'0'
+	sta .row
 	rts
+
+take
+!pet "take",0
+hit
+!pet "hit",0
+
 
 ;**************************************
 ; generate a new screen of gameplay
@@ -195,7 +279,7 @@ drawstatus
 	ldx #$00
 -	lda $100,x
 	beq +
-	sta statusmsg+4,x
+	sta statusmsg+2,x
 	inx
 	bne -
 
@@ -207,7 +291,7 @@ drawstatus
 	ldx #$00
 -	lda $100,x
 	beq +
-	sta statusmsg+15,x
+	sta statusmsg+7,x
 	inx
 	bne -
 
@@ -225,7 +309,7 @@ titlemsg
 titlemsglen=*-titlemsg
 
 statusmsg
-!scr "hp:     magick:    "
+!scr 83,":   ",88,":    "
 statusmsglen=*-statusmsg
 
 hp !byte 10

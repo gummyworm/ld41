@@ -2,21 +2,24 @@
 
 ;**************************************
 ; zeropage
+rndval=$f0
+result=$f2
+
 tmp0=$fa
 tmp1=$fb
 tmp2=$fc
 tmp3=$fd
-result=$ff
 
 ;**************************************
 ; constants
 SCREEN=$1e00
+SCREEN_W=22
 VP_W=10
 VP_H=10
 
 ; GC: generation chance (1/(2^GC_XXX))
 ; CH: character
-GC_HEART=5
+GC_HEART=6
 CH_HEART=83
 
 GC_SPELL=6
@@ -32,7 +35,7 @@ CH_SPELL=63
 	bne +
 	lda #.char
 	jmp donelbl
-+	
++
 }
 
 ;**************************************
@@ -45,9 +48,15 @@ CH_SPELL=63
 
 ;**************************************
 start
+	;srand
+	lda #$ae
+	sta rndval
+	sta rndval+1
+
+	jsr clear
+	jsr drawui
 	jsr genscreen
 	jmp *
-
 
 ;**************************************
 ; parse the player's command
@@ -64,19 +73,26 @@ genscreen
 	stx .dst
 	sta .dst+1
 
-	lda #VP_H-1
+	lda #VP_H
 	sta .y
 .l0
-	lda #VP_W
+	lda #VP_W-1
 	tay
+.l1
+	+GENCELL GC_HEART, CH_HEART, .next
+	+GENCELL GC_SPELL, CH_SPELL, .next
 
-.l1	
-	+GENCELL GC_HEART, CH_HEART, done
-	+GENCELL GC_SPELL, CH_SPELL, done
-	
-done	sta (.dst),y
+.next   sta (.dst),y
 	dey
 	bpl .l1
+
+	lda .dst
+	clc
+	adc #SCREEN_W
+	sta .dst
+
+	dec .y
+	bne .l0
 
 	rts
 
@@ -85,17 +101,49 @@ done	sta (.dst),y
 rnd
 	lda #$00
 	sta result
--	lsr tmp0
-	ror tmp0+1
+-	lsr rndval
+	ror rndval+1
 	bcc +
-	lda tmp0
+	lda rndval
 	eor #$aa  ; most significant bit *must* be set
-	sta tmp0
-	lda tmp0+1
+	sta rndval
+	lda rndval+1
 	eor #$2b  ; least significant bit should be set
-	sta tmp0+1
+	sta rndval+1
 +	rol result
 	dex
 	bne -
 	rts
 
+;**************************************
+clear
+	ldx #$00
+-	lda #' '
+	sta $1e00,x
+	sta $1f00,x
+	lda #$00
+	sta $9600,x
+	sta $9700,x
+	dex
+	bne -
+	rts
+
+;**************************************
+drawui
+	ldx #($01+VP_W)	; 'A'
+-	txa
+	sta SCREEN,x
+	dex
+	bne -
+
+	ldy #$00
+	ldx #48
+-	txa
+	sta SCREEN+SCREEN_W,y
+	tya
+	adc #SCREEN_W
+	tay
+	inx
+	cpx #48+10
+	bcc -
+	rts

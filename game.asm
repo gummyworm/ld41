@@ -14,23 +14,32 @@ tmp3=$fd
 ; constants
 SCREEN=$1e00
 SCREEN_W=22
+SCREEN_H=23
 VP_W=10
 VP_H=10
+VP_X=5
+VP_Y=0
+STATUS_LINE=12
 
 ; GC: generation chance (1/(2^GC_XXX))
 ; CH: character
-GC_HEART=6
+GC_HEART=7
 CH_HEART=83
 
 GC_SPELL=6
 CH_SPELL=63
+
+GC_MONEY=6
+CH_MONEY=36
+
+GROUND_CHAR=102
 
 ;**************************************
 ; macros
 !macro GENCELL .chance, .char, donelbl {
 	ldx #.chance
 	jsr rnd
-	lda #' '
+	lda #$00
 	ldx result
 	bne +
 	lda #.char
@@ -48,13 +57,29 @@ CH_SPELL=63
 
 ;**************************************
 start
-	;srand
-	lda #$ae
+	jsr clear
+
+	; display title
+	ldx #titlemsglen-1
+-	lda titlemsg,x
+	sta SCREEN+(SCREEN_W*(SCREEN_H/2)),x
+	dex
+	bpl -
+
+	; wait for user to begin
+-	jsr $ffe4
+	cmp #$00
+	beq -
+
+	; srand
+	lda $9004
 	sta rndval
+	jsr rnd
 	sta rndval+1
 
 	jsr clear
 	jsr drawui
+	jsr drawstatus
 	jsr genscreen
 	jmp *
 
@@ -68,8 +93,16 @@ parsecmd
 genscreen
 .y=tmp2
 .dst=tmp3
-	ldx #<(SCREEN+SCREEN_W+1)
-	lda #>(SCREEN+SCREEN_W+1)
+	;draw the ground
+	ldx #VP_W
+-	lda #GROUND_CHAR
+	sta SCREEN+((VP_H+VP_Y)*SCREEN_W)+VP_X,x
+	sta SCREEN+((VP_H+VP_Y-1)*SCREEN_W)+VP_X,x
+	dex
+	bne -
+
+	ldx #<(SCREEN+SCREEN_W+1)+VP_X
+	lda #>(SCREEN+SCREEN_W+1)+VP_X
 	stx .dst
 	sta .dst+1
 
@@ -81,9 +114,12 @@ genscreen
 .l1
 	+GENCELL GC_HEART, CH_HEART, .next
 	+GENCELL GC_SPELL, CH_SPELL, .next
+	+GENCELL GC_MONEY, CH_MONEY, .next
 
-.next   sta (.dst),y
-	dey
+.next   cmp #$00
+	beq +
+	sta (.dst),y
++	dey
 	bpl .l1
 
 	lda .dst
@@ -130,16 +166,16 @@ clear
 
 ;**************************************
 drawui
-	ldx #($01+VP_W)	; 'A'
+	ldx #(VP_W)	; 'A'-'J'
 -	txa
-	sta SCREEN,x
+	sta SCREEN+VP_X,x
 	dex
 	bne -
 
 	ldy #$00
 	ldx #48
 -	txa
-	sta SCREEN+SCREEN_W,y
+	sta SCREEN+SCREEN_W+VP_X,y
 	tya
 	adc #SCREEN_W
 	tay
@@ -147,3 +183,50 @@ drawui
 	cpx #48+10
 	bcc -
 	rts
+
+;**************************************
+; draw the player status (health/magic)
+drawstatus
+	ldy hp
+	lda #$00
+	jsr $d391
+	jsr $dddd
+
+	ldx #$00
+-	lda $100,x
+	beq +
+	sta statusmsg+4,x
+	inx
+	bne -
+
++	ldy magick
+	lda #$00
+	jsr $d391
+	jsr $dddd
+
+	ldx #$00
+-	lda $100,x
+	beq +
+	sta statusmsg+15,x
+	inx
+	bne -
+
++	ldx #statusmsglen-1
+-	lda statusmsg,x
+	sta SCREEN+(STATUS_LINE*SCREEN_W),x
+	dex
+	bpl -
+	rts
+
+;**************************************
+; data
+titlemsg
+!scr "press any key to begin"
+titlemsglen=*-titlemsg
+
+statusmsg
+!scr "hp:     magick:    "
+statusmsglen=*-statusmsg
+
+hp !byte 10
+magick !byte 5

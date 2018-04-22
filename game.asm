@@ -15,12 +15,14 @@ tmp3=$fd
 SCREEN=$1e00
 SCREEN_W=22
 SCREEN_H=23
-VP_W=10
+VP_W=9
 VP_H=10
 VP_X=5
 VP_Y=0
 STATUS_LINE=12
 INPUT_LINE=13
+
+VIEWPORT=SCREEN+VP_X+SCREEN_W
 
 ; GC: generation chance (1/(2^GC_XXX))
 ; CH: character
@@ -89,11 +91,10 @@ start
 	jsr rnd
 	sta rndval+1
 
-	jsr clear
-	jsr drawui
 	jsr drawstatus
 	jsr genscreen
 mainloop
+	jsr drawstatus
 	jsr parsecmd
 	jmp mainloop
 
@@ -101,15 +102,8 @@ mainloop
 ; get user input and parse the player's command
 parsecmd
 .input=SCREEN+SCREEN_W*INPUT_LINE
-.row=tmp0
-.col=tmp1
-	ldx #INPUT_LINE
-	ldy #0
-	jsr $fff0
--	jsr $ffe4
-	tay
-	beq -
-
+.cellpos=tmp0
+.action=tmp2
 	; clear the input line
 	lda #' '
 	ldx #10
@@ -117,7 +111,21 @@ parsecmd
 	dex
 	bpl -
 
-	cpy #'T'
+	ldx #INPUT_LINE
+	ldy #0
+	clc
+	jsr $fff0
+-	jsr $ffe4
+	tay
+	beq -
+	sty .action
+
+	cpy #'G'
+	bne +
+	jsr genscreen
+	rts
+
++	cpy #'T'
 	bne +
 	ldx #<take
 	ldy #>take
@@ -148,12 +156,12 @@ parsecmd
 	jsr $ffe4
 	cmp #'A'
 	bcc .getcoord
-	cmp #'A'+VP_W
+	cmp #'A'+VP_W+1
 	bcs .getcoord
 	jsr $ffd2
 	sec
 	sbc #'A'
-	sta .col
+	pha
 
 -	jsr $ffe4
 	cmp #'0'
@@ -163,7 +171,54 @@ parsecmd
 	jsr $ffd2
 	sec
 	sbc #'0'
-	sta .row
+	tay
+	pla
+	tax
+
++	jsr getcell
+	pha
+	jsr hicell
+	stx .cellpos
+
+	jsr $ffe4
+	beq *-3
+	cmp #$0d
+	beq +
+	pla
+	jmp parsecmd	; player cancelled action
+
++	pla
+	cmp #CH_MONEY
+	bne .heart
+.money
+	lda .action
+	cmp #'T'
+	bne +
+	lda #' '
+	ldx .cellpos
+	sta VIEWPORT-SCREEN_W,x
+	inc money
++	rts
+
+.heart
+	cmp #CH_HEART
+	bne .spell
+	lda #' '
+	ldx .cellpos
+	sta VIEWPORT-SCREEN_W,x
+	inc hp
++	rts
+
+.spell
+	cmp #CH_SPELL
+	bne .empty
+	lda #' '
+	ldx .cellpos
+	sta VIEWPORT-SCREEN_W,x
+	inc magick
++	rts
+
+.empty
 	rts
 
 take
@@ -171,29 +226,60 @@ take
 hit
 !pet "hit",0
 
+;**************************************
+; setcell sets the cell at the given (row,col) position to the value in .A
+setcell
+	!byte $2c
+;**************************************
+; getcell returns the cell under the given (row,col) position- coords in (.X,.Y)
+; The screen offset of the char is returned in .X.
+getcell
+	lda #$00
+	sta tmp1
+	txa
+	clc
+-	adc #SCREEN_W
+	dey
+	bpl -
+
++	tax
+	ldy tmp1
+	beq +
++	lda VIEWPORT-SCREEN_W,x
+	rts
+
+; highlights the cell whose viewport offset is given in .X
+hicell
+	lda VIEWPORT-SCREEN_W,x
+	eor #$80
+	sta VIEWPORT-SCREEN_W,x
+	rts
 
 ;**************************************
 ; generate a new screen of gameplay
 genscreen
 .y=tmp2
 .dst=tmp3
+	jsr clear
+	jsr drawui
+
 	;draw the ground
 	ldx #VP_W
 -	lda #GROUND_CHAR
 	sta SCREEN+((VP_H+VP_Y)*SCREEN_W)+VP_X,x
 	sta SCREEN+((VP_H+VP_Y-1)*SCREEN_W)+VP_X,x
 	dex
-	bne -
+	bpl -
 
-	ldx #<(SCREEN+SCREEN_W+1)+VP_X
-	lda #>(SCREEN+SCREEN_W+1)+VP_X
+	ldx #<(SCREEN+SCREEN_W)+VP_X
+	lda #>(SCREEN+SCREEN_W)+VP_X
 	stx .dst
 	sta .dst+1
 
-	lda #VP_H
+	lda #VP_H-1
 	sta .y
 .l0
-	lda #VP_W-1
+	lda #VP_W
 	tay
 .l1
 	+GENCELL GC_HEART, CH_HEART, .next
@@ -212,7 +298,7 @@ genscreen
 	sta .dst
 
 	dec .y
-	bne .l0
+	bpl .l0
 
 	rts
 
@@ -250,16 +336,17 @@ clear
 
 ;**************************************
 drawui
-	ldx #(VP_W)	; 'A'-'J'
+	ldx #VP_W+1	; 'A'-'J'
 -	txa
-	sta SCREEN+VP_X,x
+	sta SCREEN+VP_X-1,x
 	dex
 	bne -
 
 	ldy #$00
 	ldx #48
+	clc
 -	txa
-	sta SCREEN+SCREEN_W+VP_X,y
+	sta SCREEN+SCREEN_W+VP_X-1,y
 	tya
 	adc #SCREEN_W
 	tay
@@ -269,7 +356,7 @@ drawui
 	rts
 
 ;**************************************
-; draw the player status (health/magic)
+; draw the player status (health/magic/money)
 drawstatus
 	ldy hp
 	lda #$00
@@ -295,6 +382,17 @@ drawstatus
 	inx
 	bne -
 
++	ldy money
+	lda #$00
+	jsr $d391
+	jsr $dddd
+	ldx #$00
+-	lda $100,x
+	beq +
+	sta statusmsg+13,x
+	inx
+	bne -
+
 +	ldx #statusmsglen-1
 -	lda statusmsg,x
 	sta SCREEN+(STATUS_LINE*SCREEN_W),x
@@ -309,8 +407,9 @@ titlemsg
 titlemsglen=*-titlemsg
 
 statusmsg
-!scr 83,":   ",88,":    "
+!scr 83,":   ",88,":    $:    "
 statusmsglen=*-statusmsg
 
 hp !byte 10
 magick !byte 5
+money !byte 100

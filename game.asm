@@ -123,7 +123,40 @@ start
 mainloop
 	jsr drawstatus
 	jsr parsecmd
+	jsr enemymove
 	jmp mainloop
+
+
+;**************************************
+enemymove
+	lda enemy_hp
+	beq ++
+	ldx enemy_dmg
+	jsr rnd
+	lda hp
+	sec
+	sbc result
+	bpl +
+
+die
+	lda #$22
+	sta $900f
+
+	ldx #(SCREEN_H/2)
+	ldy #(SCREEN_W/2 - diemsglen/2)
+	jsr $fff0
+
+	jsr clear
+	ldx #$00
+-	lda diemsg,x
+	jsr $ffd2
+	inx
+	cpx #diemsglen
+	bne -
+	jmp *
+
++	sta hp
+++	rts
 
 ;**************************************
 ; get user input and parse the player's command
@@ -378,6 +411,9 @@ genscreen
 	sta .height
 	sta enemy_h
 	iny
+	lda (.src),y
+	sta enemy_dmg
+	iny
 
 	ldx #2
 	jsr rnd
@@ -551,6 +587,10 @@ titlemsg
 !pet "press any key to begin"
 titlemsglen=*-titlemsg
 
+diemsg
+!pet $90,"you have died!"
+diemsglen=*-diemsg
+
 statusmsg
 !scr 83,":   ",88,":    $:    "
 statusmsglen=*-statusmsg
@@ -564,10 +604,12 @@ enemy_hp !byte 1
 enemy_pos !byte 0
 enemy_w !byte 0
 enemy_h !byte 0
+enemy_dmg !byte 0
 
 ; graphics
 gfx_snake
 !byte  6,4	; 6x4
+!byte  2	; max damage (2^n)
 !byte  233,215,208,32,32,32,34,160
 !byte  160,32,32,223,32,32,224,227
 !byte  227,105,32,32,95,224,105,32

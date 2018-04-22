@@ -21,7 +21,8 @@ VP_H=10
 VP_X=5
 VP_Y=0
 STATUS_LINE=12
-INPUT_LINE=13
+INPUT_LINE=14
+MSG_LINE=16
 
 VIEWPORT=SCREEN+VP_X+SCREEN_W
 VIEWPORT_COL=COLORMEM+VP_X+SCREEN_W
@@ -130,33 +131,13 @@ mainloop
 ;**************************************
 enemymove
 	lda enemy_hp
-	beq ++
+	bmi +
+	beq +
 	ldx enemy_dmg
 	jsr rnd
-	lda hp
-	sec
-	sbc result
-	bpl +
-
-die
-	lda #$22
-	sta $900f
-
-	ldx #(SCREEN_H/2)
-	ldy #(SCREEN_W/2 - diemsglen/2)
-	jsr $fff0
-
-	jsr clear
-	ldx #$00
--	lda diemsg,x
-	jsr $ffd2
-	inx
-	cpx #diemsglen
-	bne -
-	jmp *
-
-+	sta hp
-++	rts
+	lda result
+	jsr harmplayer
++	rts
 
 ;**************************************
 ; get user input and parse the player's command
@@ -491,6 +472,52 @@ rnd
 	rts
 
 ;**************************************
+harmplayer
+	sta tmp0
+	lda hp
+	sec
+	sbc tmp0
+	sta hp
+
+	ldy tmp0
+	lda #$00
+	jsr $d391
+	jsr $dddd
+
+	ldx #MSG_LINE
+	ldy #$00
+	clc
+	jsr $fff0
+	ldx #<harmmsg1
+	ldy #>harmmsg1
+	jsr puts
+	ldx #<$100
+	ldy #>$100
+	jsr puts
+	ldx #<harmmsg2
+	ldy #>harmmsg2
+	jsr puts
+	lda hp
+	bmi die
+	rts
+die
+	lda #$22
+	sta $900f
+
+	ldx #(SCREEN_H/2)
+	ldy #(SCREEN_W/2 - diemsglen/2)
+	jsr $fff0
+
+	jsr clear
+	ldx #$00
+-	lda diemsg,x
+	jsr $ffd2
+	inx
+	cpx #diemsglen
+	bne -
+	jmp *
+
+;**************************************
 clear
 	ldx #$00
 -	lda #' '
@@ -580,6 +607,19 @@ drawstatus
 .done
 	rts
 
+
+;**************************************
+puts
+	stx tmp0
+	sty tmp0+1
+	ldy #$00
+-	lda (tmp0),y
+	beq +
+	jsr $ffd2
+	iny
+	bne -
++	rts
+
 ;**************************************
 ; data
 titlemsg
@@ -590,6 +630,11 @@ titlemsglen=*-titlemsg
 diemsg
 !pet $90,"you have died!"
 diemsglen=*-diemsg
+
+harmmsg1
+!pet "you receive ",0
+harmmsg2
+!pet " damage!",0
 
 statusmsg
 !scr 83,":   ",88,":    $:    "

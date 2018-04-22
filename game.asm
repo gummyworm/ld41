@@ -15,6 +15,7 @@ tmp3=$fd
 SCREEN=$1e00
 SCREEN_W=22
 SCREEN_H=23
+COLORMEM=$9600
 VP_W=9
 VP_H=10
 VP_X=5
@@ -23,6 +24,8 @@ STATUS_LINE=12
 INPUT_LINE=13
 
 VIEWPORT=SCREEN+VP_X+SCREEN_W
+VIEWPORT_COL=COLORMEM+VP_X+SCREEN_W
+VIEWPORT_END=SCREEN+VP_X+VP_W+SCREEN_W*SCREEN_H
 
 ; GC: generation chance (1/(2^GC_XXX))
 ; CH: character
@@ -187,7 +190,24 @@ parsecmd
 	pla
 	jmp parsecmd	; player cancelled action
 
-+	pla
++	
+.enemy
+	ldx .cellpos
+	lda VIEWPORT_COL-SCREEN_W,x
+	and #$0f
+	cmp #$02
+	bne .object
+	lda .action
+	cmp #'H'
+	bne +
+	dec enemy_hp
+	bne +
+	jsr kill_enemy
+	
++	rts
+
+.object
+	pla
 	cmp #CH_MONEY
 	bne .heart
 .money
@@ -300,6 +320,80 @@ genscreen
 	dec .y
 	bpl .l0
 
+.genenemy
+.width=tmp0
+.height=tmp1
+.src=tmp2
+	ldx #<gfx_snake
+	lda #>gfx_snake
+	stx .src
+	sta .src+1
+	ldy #$00
+	sty .enemydst
+	sty .enemycol
+	lda (.src),y
+	sta .width
+	sta enemy_w
+	iny
+	lda (.src),y
+	sta .height
+	sta enemy_h
+	iny
+
+	ldx #2
+	jsr rnd
+	lda #<(VIEWPORT+(SCREEN_W*VP_H)-(SCREEN_W*2))
+	ldx .height
+-	sec
+	sbc #SCREEN_W
+	dex
+	bne -
+	clc
+	adc result
+	sta enemy_pos
+	sta .enemydst
+	sta .enemycol
+
+--	ldx #$00
+-	lda (.src),y
+.enemydst=*+1
+	sta VIEWPORT,x
+	lda #$02
+.enemycol=*+1
+	sta $9600,x
+	iny
+	inx
+	cpx .width
+	bcc -
+	lda .enemydst
+	clc
+	adc #SCREEN_W
+	sta .enemydst
+	lda .enemycol
+	clc
+	adc #SCREEN_W
+	sta .enemycol
+	dec .height
+	bne --
+	
+	rts
+
+kill_enemy
+--	ldx enemy_pos
+	ldy enemy_w
+-	lda #$00
+	sta $9600,x
+	lda #' '
+	sta VIEWPORT,x
+	inx
+	dey
+	bpl -
+	lda enemy_pos
+	clc
+	adc #SCREEN_W
+	sta enemy_pos
+	dec enemy_h
+	bne --
 	rts
 
 ;**************************************
@@ -413,3 +507,16 @@ statusmsglen=*-statusmsg
 hp !byte 10
 magick !byte 5
 money !byte 100
+
+enemy_hp !byte 1
+enemy_pos !byte 0
+enemy_w !byte 0
+enemy_h !byte 0
+
+; graphics
+gfx_snake
+!byte  6,4	; 6x4
+!byte  233,215,208,32,32,32,34,160
+!byte  160,32,32,223,32,32,224,227
+!byte  227,105,32,32,95,224,105,32
+

@@ -38,6 +38,9 @@ CH_SPELL=63
 GC_MONEY=6
 CH_MONEY=36
 
+GC_GEM=1
+CH_GEM=$5a
+
 GROUND_CHAR=102
 
 ;**************************************
@@ -46,6 +49,22 @@ GROUND_CHAR=102
 	ldx #.chance
 	jsr rnd
 	lda #$00
+	ldx result
+	bne +
+	lda #.char
+	jmp donelbl
++
+}
+
+!macro GENCELL2 .chance, .char, donelbl {
+	ldx #.chance
+	jsr rnd
+	lda result
+	php
+	jsr rnd
+	lda #$00
+	plp
+	bne +
 	ldx result
 	bne +
 	lda #.char
@@ -77,11 +96,16 @@ start
 	jsr clear
 
 	; display title
-	ldx #titlemsglen-1
+	ldx #5
+	ldy #0
+	clc
+	jsr $fff0
+	ldx #$00
 -	lda titlemsg,x
-	sta SCREEN+(SCREEN_W*(SCREEN_H/2)),x
-	dex
-	bpl -
+	jsr $ffd2
+	inx
+	cpx #titlemsglen
+	bne -
 
 	; wait for user to begin
 -	jsr $ffe4
@@ -178,32 +202,36 @@ parsecmd
 	pla
 	tax
 
-+	jsr getcell
+	jsr getcell
 	pha
 	jsr hicell
 	stx .cellpos
 
 	jsr $ffe4
 	beq *-3
+	ldx .cellpos
 	cmp #$0d
 	beq +
 	pla
+	jsr hicell	; unhighlight
 	jmp parsecmd	; player cancelled action
 
-+	
++	jsr hicell	; unhighlight
 .enemy
 	ldx .cellpos
 	lda VIEWPORT_COL-SCREEN_W,x
 	and #$0f
 	cmp #$02
 	bne .object
+
+	pla
 	lda .action
 	cmp #'H'
 	bne +
 	dec enemy_hp
 	bne +
 	jsr kill_enemy
-	
+
 +	rts
 
 .object
@@ -231,11 +259,21 @@ parsecmd
 
 .spell
 	cmp #CH_SPELL
-	bne .empty
+	bne .gem
 	lda #' '
 	ldx .cellpos
 	sta VIEWPORT-SCREEN_W,x
 	inc magick
++	rts
+
+.gem
+	cmp #CH_GEM
+	bne .empty
+	jmp *
+	lda #' '
+	ldx .cellpos
+	sta VIEWPORT-SCREEN_W,x
+	inc gemcnt
 +	rts
 
 .empty
@@ -305,6 +343,7 @@ genscreen
 	+GENCELL GC_HEART, CH_HEART, .next
 	+GENCELL GC_SPELL, CH_SPELL, .next
 	+GENCELL GC_MONEY, CH_MONEY, .next
+	+GENCELL2 GC_GEM, CH_GEM, .next
 
 .next   cmp #$00
 	beq +
@@ -375,19 +414,19 @@ genscreen
 	sta .enemycol
 	dec .height
 	bne --
-	
+
 	rts
 
 kill_enemy
 --	ldx enemy_pos
 	ldy enemy_w
--	lda #$00
-	sta $9600,x
-	lda #' '
-	sta VIEWPORT,x
+-	lda #' '
+	sta SCREEN,x
+	lda #$00
+	sta COLORMEM,x
 	inx
 	dey
-	bpl -
+	bne -
 	lda enemy_pos
 	clc
 	adc #SCREEN_W
@@ -487,17 +526,29 @@ drawstatus
 	inx
 	bne -
 
+	; draw HP, magic, and money
 +	ldx #statusmsglen-1
 -	lda statusmsg,x
 	sta SCREEN+(STATUS_LINE*SCREEN_W),x
 	dex
 	bpl -
+
+	; draw the gems that the player has
+	ldx gemcnt
+	beq .done
+-	lda #CH_GEM
+	sta SCREEN+(STATUS_LINE*SCREEN_W),x
+	dex
+	bpl -
+
+.done
 	rts
 
 ;**************************************
 ; data
 titlemsg
-!scr "press any key to begin"
+!pet $90,"you must find 3 magic gems to restore power to the staff of truth",$0d,$0d,$0d
+!pet "press any key to begin"
 titlemsglen=*-titlemsg
 
 statusmsg
@@ -507,6 +558,7 @@ statusmsglen=*-statusmsg
 hp !byte 10
 magick !byte 5
 money !byte 100
+gemcnt !byte 0
 
 enemy_hp !byte 1
 enemy_pos !byte 0

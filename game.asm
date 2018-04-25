@@ -9,6 +9,14 @@ tmp0=$fa
 tmp1=$fb
 tmp2=$fc
 tmp3=$fd
+tmp4=$fe
+tmp5=$22
+cellpos=$bb
+enemy_idx=$bc
+
+width=tmp0
+height=tmp1
+src=tmp2
 
 ;**************************************
 ; constants
@@ -20,9 +28,10 @@ VP_W=9
 VP_H=10
 VP_X=5
 VP_Y=0
-STATUS_LINE=12
-INPUT_LINE=14
+STATUS_LINE=11
+INPUT_LINE=22
 MSG_LINE=16
+MSG_H=5
 
 VIEWPORT=SCREEN+VP_X+SCREEN_W
 VIEWPORT_COL=COLORMEM+VP_X+SCREEN_W
@@ -43,6 +52,13 @@ GC_GEM=1
 CH_GEM=$5a
 
 GROUND_CHAR=102
+
+GEMS_TO_WIN=3
+XP_PER_KILL=10
+XP_RAND=2
+XP_TO_LVLUP=100
+
+MAX_ENEMIES=2
 
 ;**************************************
 ; macros
@@ -70,17 +86,6 @@ GROUND_CHAR=102
 	bne +
 	lda #.char
 	jmp donelbl
-+
-}
-
-; .X contains the # of characters matched
-!macro STRCMP .src, .other {
-	ldx #$ff
--	inx
-	lda .other,x
-	beq +
-	cmp .src,x
-	beq -
 +
 }
 
@@ -127,23 +132,84 @@ mainloop
 	jsr enemymove
 	jmp mainloop
 
+;**************************************
+;loads the data associated with the enemy in <X/>Y
+!zone loadenemy
+loadenemy
+src=tmp2
+	stx src
+	sty src+1
+	sta .index
+	; get random HP/damage for monster
+	ldx #2
+	jsr rnd
+	lda result
+	sta enemy_dmg
+	ldx #2
+	jsr rnd
+	lda result
+
+.index=*+1
+	ldx #$00
+	sta enemy_hp,x
+	ldy #$00
+	lda (src),y
+	sta width
+	sta enemy_w,x
+	iny
+	lda (src),y
+	sta height
+	sta enemy_h,x
+	iny
+	lda (src),y
+	adc enemy_hp
+	sta enemy_hp,x
+	iny
+	lda (src),y
+	adc enemy_dmg
+	sta enemy_dmg,x
+	iny
+
+	rts
+
+;**************************************
+addenemy
+	ldx #MAX_ENEMIES
+-	lda enemy_dmg,x
+	sta enemy_dmg+1,x
+	lda enemy_w,x
+	sta enemy_w+1,x
+	lda enemy_h,x
+	sta enemy_h+1,x
+	lda enemy_hp,x
+	sta enemy_hp+1,x
+	rts
 
 ;**************************************
 enemymove
-	lda enemy_hp
+.i=tmp3
+	ldx #0
+	stx .i
+.l0	lda enemy_hp,x
 	bmi +
 	beq +
-	ldx enemy_dmg
+	ldx #2
 	jsr rnd
 	lda result
+
+	ldx .i
+	adc enemy_dmg,x
 	jsr harmplayer
-+	rts
++	inc .i
+	ldx .i
+	cpx #MAX_ENEMIES
+	bcc .l0
+	rts
 
 ;**************************************
 ; get user input and parse the player's command
 parsecmd
 .input=SCREEN+SCREEN_W*INPUT_LINE
-.cellpos=tmp0
 .action=tmp2
 	; clear the input line
 	lda #' '
@@ -161,17 +227,43 @@ parsecmd
 	beq -
 	sty .action
 
-	cpy #'G'
+.chkrun
+	cpy #'R'	; Run
+	bne .chktake
+	lda enemy_hp
+	beq +
+	bpl .run
++	jsr genscreen
+	jmp parsecmd
+
+.run	lda $9004
+	and #$01
 	bne +
+	ldx #<runmsg
+	ldy #>runmsg
+	jsr msgputs
 	jsr genscreen
 	rts
++	ldx #<runfailmsg
+	ldy #>runfailmsg
+	jsr msgputs
+	rts
 
-+	cpy #'T'
-	bne +
+.chktake
+	cpy #'T'
+	bne .chkcast
 	ldx #<take
 	ldy #>take
 	bne .printaction
-+	cpy #'H'
+
+.chkcast
+	cpy #'C'
+	bne .chkhit
+	ldx #<cast
+	ldy #>cast
+	bne .printaction
+.chkhit
+	cpy #'H'
 	bne +
 	ldx #<hit
 	ldy #>hit
@@ -219,11 +311,11 @@ parsecmd
 	jsr getcell
 	pha
 	jsr hicell
-	stx .cellpos
+	stx cellpos
 
 	jsr $ffe4
 	beq *-3
-	ldx .cellpos
+	ldx cellpos
 	cmp #$0d
 	beq +
 	pla
@@ -231,72 +323,175 @@ parsecmd
 	jmp parsecmd	; player cancelled action
 
 +	jsr hicell	; unhighlight
-.enemy
-	ldx .cellpos
-	lda VIEWPORT_COL-SCREEN_W,x
-	and #$0f
-	cmp #$02
-	bne .object
-
+	lda VIEWPORT-SCREEN_W,x
+	cmp #' '
+	bne +
+	ldx #<nothingmsg
+	ldy #>nothingmsg
+	jsr msgputs
 	pla
+	jmp parsecmd
+
++	pla
+	cmp #CH_HEART
+	bne +
+	ldx #HEART_IDX
++	cmp #CH_GEM
+	bne +
+	ldx #GEM_IDX
++	cmp #CH_SPELL
+	bne +
+	ldx #SPELL_IDX
++	cmp #CH_MONEY
+	bne +
+	ldx #MONEY_IDX
++	lda VIEWPORT_COL-SCREEN_W,x
+	and #$0f
+	beq +	; black= not enemy, !black= enemy
+	ldx #-1
+-	inx
+	cmp enemy_col,x
+	bne -
+	stx enemy_idx
+	ldx #ENEMY_IDX
+	
++	txa
+	asl
+	tax
+
 	lda .action
 	cmp #'H'
 	bne +
-	dec enemy_hp
+	lda hittab,x
+	ldy hittab+1,x
+	bne .exec
++	cmp #'T'
 	bne +
-	jsr kill_enemy
-
-+	rts
-
-.object
-	pla
-	cmp #CH_MONEY
-	bne .heart
-.money
-	lda .action
-	cmp #'T'
+	lda taketab,x
+	ldy taketab+1,x
+	bne .exec
++	cmp #'C'
 	bne +
-	lda #' '
-	ldx .cellpos
-	sta VIEWPORT-SCREEN_W,x
-	inc money
-+	rts
-
-.heart
-	cmp #CH_HEART
-	bne .spell
-	lda #' '
-	ldx .cellpos
-	sta VIEWPORT-SCREEN_W,x
-	inc hp
-+	rts
-
-.spell
-	cmp #CH_SPELL
-	bne .gem
-	lda #' '
-	ldx .cellpos
-	sta VIEWPORT-SCREEN_W,x
-	inc magick
-+	rts
-
-.gem
-	cmp #CH_GEM
-	bne .empty
-	jmp *
-	lda #' '
-	ldx .cellpos
-	sta VIEWPORT-SCREEN_W,x
-	inc gemcnt
-+	rts
-
-.empty
-	rts
+	lda casttab,x
+	ldy casttab+1,x
+	bne .exec
+.exec	sta .target
+	sty .target+1
+.target=*+1
+	jmp $0000
 
 take
 !pet "take",0
 hit
 !pet "hit",0
+cast
+!pet "cast",0
+
+
+HEART_IDX = 0
+ENEMY_IDX = 1
+SPELL_IDX = 2
+GEM_IDX = 3
+MONEY_IDX = 4
+
+taketab
+!word takeheart
+!word takeenemy
+!word takespell
+!word takegem
+!word takemoney
+
+casttab
+!word casterr
+!word castenemy
+!word casterr
+!word casterr
+!word casterr
+
+hittab
+!word hiterr
+!word hitenemy
+!word hiterr
+!word hiterr
+!word hiterr
+
+;**************************************
+cmderr
+	jsr msgputs
+	jmp parsecmd
+
+;**************************************
+clrcell
+	lda #' '
+	ldx cellpos
+	sta VIEWPORT-SCREEN_W,x
+	rts
+takeheart
+	ldx #4
+	jsr rnd
+	lda result
+	adc #3
+	tax
+	adc hp
+	sta hp
+	lda #115
+	jsr printtake
+	jmp clrcell
+takeenemy
+	ldx #<canttake
+	ldy #>canttake
+	jmp cmderr
+takegem
+	inc gemcnt
+	lda gemcnt
+	cmp #GEMS_TO_WIN
+	bcc +
+	jsr win
++	ldx #1
+	lda #CH_GEM
+	jsr printtake
+	jmp clrcell
+takespell
+	inc magick
+	ldx #1
+	lda #CH_SPELL
+	jsr printtake
+	jmp clrcell
+takemoney
+	inc money
+	ldx #1
+	lda #CH_MONEY
+	jsr printtake
+	jmp clrcell
+
+;**************************************
+casterr
+	ldx #<canttarget
+	ldy #>canttarget
+	jmp cmderr
+castenemy
+	ldx #<castmsg
+	ldy #>castmsg
+	jsr msgputs
+	ldx dmg
+	jsr rnd
+	lda result
+	jmp harmenemy
+
+;**************************************
+hiterr
+	ldx #<canttarget
+	ldy #>canttarget
+	jmp cmderr
+hitenemy
+	ldx #<hurtmsg
+	ldy #>hurtmsg
+	jsr msgputs
+	ldx dmg
+	jsr rnd
+	lda result
+	adc basedmg
+	jmp harmenemy
 
 ;**************************************
 ; setcell sets the cell at the given (row,col) position to the value in .A
@@ -328,10 +523,26 @@ hicell
 	rts
 
 ;**************************************
+win
+	jsr clear
+	lda #$66|8
+	sta $900f
+	ldy #$03
+	ldx #(SCREEN_H/2-4)
+	clc
+	jsr $fff0
+	ldx #<winmsg
+	ldy #>winmsg
+	jsr puts
+	jmp *
+
+;**************************************
 ; generate a new screen of gameplay
+!zone genscreen
 genscreen
 .y=tmp2
 .dst=tmp3
+.enemycnt=tmp4
 	jsr clear
 	jsr drawui
 
@@ -373,53 +584,50 @@ genscreen
 	dec .y
 	bpl .l0
 
+	lda #MAX_ENEMIES-1
+	sta .enemycnt
 .genenemy
-.width=tmp0
-.height=tmp1
-.src=tmp2
-	ldx #<gfx_snake
-	lda #>gfx_snake
-	stx .src
-	sta .src+1
-	ldy #$00
-	sty .enemydst
-	sty .enemycol
-	lda (.src),y
-	sta .width
-	sta enemy_w
-	iny
-	lda (.src),y
-	sta .height
-	sta enemy_h
-	iny
-	lda (.src),y
-	sta enemy_dmg
-	iny
+	lda .enemycnt
+	pha
+	asl
+	tax
+	lda enemiestab,x
+	ldy enemiestab+1,x
+	tax
+	pla
+	jsr loadenemy
 
+	; get destination to draw for ground enemy
+.drawenemy
 	ldx #2
 	jsr rnd
-	lda #<(VIEWPORT+(SCREEN_W*VP_H)-(SCREEN_W*2))
-	ldx .height
+	ldx .enemycnt
+	lda basepositions,x
+	ldx height
 -	sec
 	sbc #SCREEN_W
 	dex
 	bne -
 	clc
 	adc result
-	sta enemy_pos
+	ldx .enemycnt
+	sta enemy_pos,x
 	sta .enemydst
 	sta .enemycol
+	lda enemy_col,x
+	sta .drawcol
 
 --	ldx #$00
--	lda (.src),y
+-	lda (src),y
 .enemydst=*+1
 	sta VIEWPORT,x
+.drawcol=*+1
 	lda #$02
 .enemycol=*+1
 	sta $9600,x
 	iny
 	inx
-	cpx .width
+	cpx width
 	bcc -
 	lda .enemydst
 	clc
@@ -429,14 +637,28 @@ genscreen
 	clc
 	adc #SCREEN_W
 	sta .enemycol
-	dec .height
+	dec height
 	bne --
-
+	dec .enemycnt
+	bpl .genenemy
 	rts
 
+enemiestab
+!word gfx_snake
+!word gfx_bat
+colors
+!byte 2
+!byte 4
+basepositions
+!byte <(VIEWPORT+(SCREEN_W*VP_H)-(SCREEN_W*2))
+!byte <(VIEWPORT+(SCREEN_W*VP_H)-(SCREEN_W*6))
+
+;**************************************
 kill_enemy
---	ldx enemy_pos
-	ldy enemy_w
+--	ldx enemy_idx
+	lda enemy_pos,x
+	ldy enemy_w,x
+	tax
 -	lda #' '
 	sta SCREEN,x
 	lda #$00
@@ -444,11 +666,12 @@ kill_enemy
 	inx
 	dey
 	bne -
-	lda enemy_pos
+	ldx enemy_idx
+	lda enemy_pos,x
 	clc
 	adc #SCREEN_W
-	sta enemy_pos
-	dec enemy_h
+	sta enemy_pos,x
+	dec enemy_h,x
 	bne --
 	rts
 
@@ -472,30 +695,91 @@ rnd
 	rts
 
 ;**************************************
+scrollmsg
+	lda #MSG_H
+	sta tmp0
+	ldx #$00
+--	ldy #SCREEN_W
+-	lda SCREEN+SCREEN_W*(MSG_LINE+1),x
+	sta SCREEN+SCREEN_W*MSG_LINE,x
+	inx
+	dey
+	bpl -
+	dec tmp0
+	bne --
+	jsr clrmsg
+	rts
+
+;**************************************
+harmenemy
+	pha
+	pla
+	sta tmp0
+
+	ldx enemy_idx
+	lda enemy_hp,x
+	sec
+	sbc tmp0
+	sta enemy_hp,x
+
+	lda tmp0
+	jsr putb
+	ldx #<damagemsg
+	ldy #>damagemsg
+	jsr puts
+
+	ldx enemy_idx
+	lda enemy_hp,x
+	bmi +
+	bne ++
++	ldx #<killmsg
+	ldy #>killmsg
+	jsr msgputs
+	ldx #<gainedmsg
+	ldy #>gainedmsg
+	jsr msgputs
+	ldx #XP_RAND
+	jsr rnd
+	lda result
+	adc #XP_PER_KILL
+	pha
+	adc xp
+	sta xp
+	cmp #XP_TO_LVLUP
+	bcc +
+	jsr levelup
+
++	pla
+	jsr putb
+	ldx #<xpmsg
+	ldy #>xpmsg
+	jsr puts
+
+	jsr kill_enemy
+++	rts
+
+;**************************************
+levelup
+	inc lvl
+	inc basedmg
+	inc hp
+	rts
+
+;**************************************
 harmplayer
+	pha
 	sta tmp0
 	lda hp
 	sec
 	sbc tmp0
 	sta hp
-
-	ldy tmp0
-	lda #$00
-	jsr $d391
-	jsr $dddd
-
-	ldx #MSG_LINE
-	ldy #$00
-	clc
-	jsr $fff0
 	ldx #<harmmsg1
 	ldy #>harmmsg1
-	jsr puts
-	ldx #<$100
-	ldy #>$100
-	jsr puts
-	ldx #<harmmsg2
-	ldy #>harmmsg2
+	jsr msgputs
+	pla
+	jsr putb
+	ldx #<damagemsg
+	ldy #>damagemsg
 	jsr puts
 	lda hp
 	bmi die
@@ -554,59 +838,59 @@ drawui
 ;**************************************
 ; draw the player status (health/magic/money)
 drawstatus
-	ldy hp
-	lda #$00
-	jsr $d391
-	jsr $dddd
-
-	ldx #$00
--	lda $100,x
-	beq +
-	sta statusmsg+2,x
-	inx
-	bne -
-
-+	ldy magick
-	lda #$00
-	jsr $d391
-	jsr $dddd
-
-	ldx #$00
--	lda $100,x
-	beq +
-	sta statusmsg+7,x
-	inx
-	bne -
-
-+	ldy money
-	lda #$00
-	jsr $d391
-	jsr $dddd
-	ldx #$00
--	lda $100,x
-	beq +
-	sta statusmsg+13,x
-	inx
-	bne -
-
-	; draw HP, magic, and money
-+	ldx #statusmsglen-1
--	lda statusmsg,x
-	sta SCREEN+(STATUS_LINE*SCREEN_W),x
+	ldx #SCREEN_W
+	lda #' '
+-	sta SCREEN+(SCREEN_W*STATUS_LINE),x
 	dex
 	bpl -
+
+	ldx #STATUS_LINE
+	ldy #0
+	clc
+	jsr $fff0
+
+	ldx #<statusmsg1
+	ldy #>statusmsg1
+	jsr puts
+	lda hp
+	jsr putb
+	ldx #<statusmsg2
+	ldy #>statusmsg2
+	jsr puts
+	lda magick
+	jsr putb
+	ldx #<statusmsg3
+	ldy #>statusmsg3
+	jsr puts
+	lda money
+	jsr putb
+
+	ldx #STATUS_LINE+1
+	ldy #0
+	clc
+	jsr $fff0
+
+	; draw XP and level
+	ldx #<statuslvl
+	ldy #>statuslvl
+	jsr puts
+	lda lvl
+	jsr putb
+	ldx #<statusxp
+	ldy #>statusxp
+	jsr puts
+	lda xp
+	jsr putb
 
 	; draw the gems that the player has
 	ldx gemcnt
 	beq .done
 -	lda #CH_GEM
-	sta SCREEN+(STATUS_LINE*SCREEN_W),x
+	sta SCREEN,x
 	dex
-	bpl -
+	bne -
 
-.done
-	rts
-
+.done	rts
 
 ;**************************************
 puts
@@ -621,41 +905,133 @@ puts
 +	rts
 
 ;**************************************
+; print the take message for the quantity given in .X and the object (char) in
+; .A
+printtake
+	pha
+	txa
+	pha
+
+	ldx #<takemsg
+	ldy #>takemsg
+	jsr msgputs
+	pla
+	jsr putb
+	lda #' '
+	jsr $ffd2
+	pla
+	jsr $ffd2
+	rts
+
+;**************************************
+clrmsg
+	lda #' '
+	ldx #SCREEN_W-1
+-	sta SCREEN+(SCREEN_W*(MSG_LINE+MSG_H)),x
+	dex
+	bpl -
+	rts
+
+;**************************************
+putb
+	tay
+	lda #$00
+	jsr $d391
+	jsr $dddd
+	ldx #<$100
+	ldy #>$100
+	jsr puts
+	rts
+
+;**************************************
+msgputs
+	stx tmp4
+	sty tmp5
+	jsr scrollmsg
+	ldx #MSG_LINE+MSG_H-1
+	ldy #$00
+	clc
+	jsr $fff0
+	ldx tmp4
+	ldy tmp5
+	jsr puts
+	rts
+
+;**************************************
 ; data
 titlemsg
 !pet $90,"you must find 3 magic gems to restore power to the staff of truth",$0d,$0d,$0d
 !pet "press any key to begin"
 titlemsglen=*-titlemsg
 
-diemsg
-!pet $90,"you have died!"
+diemsg !pet $90,"you have died!"
 diemsglen=*-diemsg
 
-harmmsg1
-!pet "you receive ",0
-harmmsg2
-!pet " damage!",0
+harmmsg1 !pet "you receive ",0
+damagemsg !pet " damage!",0
+
+hurtmsg !pet "you hit for ",0
+castmsg !pet "you cast for ",0
+killmsg !pet "you kill the monster!",0
+takemsg !pet "picked up ",0
+gainedmsg !pet "gained ",0
+xpmsg !pet "xp",0
+
+canttake !pet "you can't take that!",0
+canttarget !pet "not a valid target!",0
+
+winmsg
+!pet $05,"congratulations!",$0d
+!pet "you have collected 3",$0d,"gems. "
+!pet "now power may berestored at last to",$0d,"the magic staff",0
+
+nothingmsg
+!pet "there is nothing there",0
 
 statusmsg
-!scr 83,":   ",88,":    $:    "
-statusmsglen=*-statusmsg
+statusmsg1 !pet "hp:",0
+statusmsg2 !pet " mgk:",0
+statusmsg3 !pet " $:",0
 
-hp !byte 10
+!scr 83,":    ",88,":    $:    "
+statusmsglen=*-statusmsg
+statuslvl: !pet "lvl:",0
+statusxp: !pet " xp:",0
+
+runmsg !pet "you ran away!",0
+runfailmsg !pet "couldn't get away!",0
+
+hp !byte 100
 magick !byte 5
 money !byte 100
+dmg !byte 2 	; max bonus damage (2^n)
+basedmg !byte 1 ; min damage
+spelldmg !byte 5 ; spell max damage (2^n)
 gemcnt !byte 0
 
-enemy_hp !byte 1
-enemy_pos !byte 0
-enemy_w !byte 0
-enemy_h !byte 0
-enemy_dmg !byte 0
+; enemy tables: entries contain 1 byte per enemy
+enemy_hp !byte 1,0
+enemy_pos !byte 0,0
+enemy_w !byte 0,0
+enemy_h !byte 0,0
+enemy_dmg !byte 0,0
+enemy_col !byte 2,3
+
+lvl !byte 0
+xp !byte 0
 
 ; graphics
 gfx_snake
 !byte  6,4	; 6x4
-!byte  2	; max damage (2^n)
+!byte  5	; max HP
+!byte  2	; base damage
 !byte  233,215,208,32,32,32,34,160
 !byte  160,32,32,223,32,32,224,227
 !byte  227,105,32,32,95,224,105,32
 
+gfx_bat
+!byte  6,3	; 6x4
+!byte  2	; max HP
+!byte  2	; base damage
+!byte  233,223,223,233,233,223,105,95
+!byte  174,174,105,95,32,32,34,34,32,32

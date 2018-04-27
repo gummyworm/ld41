@@ -37,6 +37,9 @@ VIEWPORT=SCREEN+VP_X+SCREEN_W
 VIEWPORT_COL=COLORMEM+VP_X+SCREEN_W
 VIEWPORT_END=SCREEN+VP_X+VP_W+SCREEN_W*SCREEN_H
 
+CH_STAR=42
+CH_SWORD=30
+
 ; GC: generation chance (1/(2^GC_XXX))
 ; CH: character
 GC_HEART=7
@@ -91,6 +94,7 @@ MAX_ENEMIES=2
 
 ;**************************************
 *=$1001
+basicstub
 !word $100b
 !word 2018
 !byte $9e
@@ -127,6 +131,7 @@ start
 	jsr drawstatus
 	jsr genscreen
 mainloop
+	jsr swordrain
 	jsr drawstatus
 	jsr parsecmd
 	jsr enemymove
@@ -213,7 +218,7 @@ parsecmd
 .action=tmp2
 	; clear the input line
 	lda #' '
-	ldx #10
+	ldx #SCREEN_W
 -	sta .input,x
 	dex
 	bpl -
@@ -261,7 +266,27 @@ parsecmd
 	bne .chkhit
 	ldx #<cast
 	ldy #>cast
-	bne .printaction
+	jsr puts
+	lda #$80
+	eor .input
+	sta .input
+.getspell
+	jsr $ffe4
+	cmp #'0'
+	bcc .getspell
+	cmp #'0'+numspells
+	bcs .getspell
+	sec
+	sbc #'0'
+	asl
+	tax
+	lda spellnames,x
+	ldy spellnames+1,x
+	tax
+	jsr puts
+	lda #' '
+	jsr $ffd2
+	jmp .getcoord
 .chkhit
 	cpy #'H'
 	bne +
@@ -273,13 +298,8 @@ parsecmd
 .printaction
 	stx tmp0
 	sty tmp0+1
-	ldy #$00
--	lda (tmp0),y
-	beq +
-	jsr $ffd2
-	iny
-	bne -
-+	lda #' '
+	jsr puts
+	lda #' '
 	jsr $ffd2
 	lda #$80
 	eor .input
@@ -385,7 +405,7 @@ take
 hit
 !pet "hit",0
 cast
-!pet "cast",0
+!pet "cast ",0
 
 
 HEART_IDX = 0
@@ -957,8 +977,57 @@ msgputs
 	jsr puts
 	rts
 
+swordrain
+	lda #CH_SWORD
+	!byte $2c
+;**************************************
+; do the animation for the starfall spell
+!zone starfall
+starfall
+.line_bak=freebuff
+	lda #CH_STAR
+	sta .ch
+	ldx #VP_W-1
+.l0	ldy #VP_W-1
+.l1	lda VIEWPORT,x
+	sta .line_bak,y
+.ch=*+1
+	lda #$00
+	sta VIEWPORT,x
+	dex
+	dey
+	bpl .l1
+
+	ldy #30
+.dly	lda #$03
+	cmp $9004
+	bne *-3
+	dey
+	bpl .dly
+
+	txa
+	clc
+	adc #VP_W
+	tax
+	ldy #VP_W-1
+.restore
+	lda .line_bak,y
+	sta VIEWPORT,x
+	dex
+	dey
+	bpl .restore
+
+	txa
+	clc
+	adc #SCREEN_W+VP_W
+	tax
+	cpx #SCREEN_W*VP_H
+	bcc .l0
+	rts
+
 ;**************************************
 ; data
+!zone data
 titlemsg
 !pet $90,"you must find 3 magic gems to restore power to the staff of truth",$0d,$0d,$0d
 !pet "press any key to begin"
@@ -1001,6 +1070,13 @@ statusxp: !pet " xp:",0
 runmsg !pet "you ran away!",0
 runfailmsg !pet "couldn't get away!",0
 
+spellnames
+!word starfallname
+!word swordrainname
+numspells=(*-spellnames)/2
+starfallname  !pet "starfall",0
+swordrainname !pet "swordrain",0
+
 hp !byte 100
 magick !byte 5
 money !byte 100
@@ -1035,3 +1111,7 @@ gfx_bat
 !byte  2	; base damage
 !byte  233,223,223,233,233,223,105,95
 !byte  174,174,105,95,32,32,34,34,32,32
+
+freebuff
+
+prg_size=*-basicstub

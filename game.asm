@@ -182,6 +182,8 @@ mainloop
 	jmp mainloop
 
 ;**************************************
+exclaim lda #'!'
+	!byte $2c
 rvson   lda #$12
 	!byte $2c
 rvsoff  lda #$92
@@ -249,22 +251,73 @@ addenemy
 	rts
 
 ;**************************************
+removeobj
+	ldx #7
+	jsr rnd
+	ldx result
+-	lda COLORMEM,x
+	and #$0f
+	bne +
+	lda SCREEN,x
+	cmp #' '
+	bne .rem
++	dex
+	bne -
+	; no target found
+	ldx #<staresmsg
+	ldy #>staresmsg
+	jmp puts
+
+.rem    pha
+	ldx #<eatsmsg
+	ldy #>eatsmsg
+	jsr space
+	pla
+	ldy $d3
+	sta ($d1),y
+	rts
+
+;**************************************
 enemymove
-.i=tmp3
 	ldx #0
-	stx .i
+	stx enemy_idx
 .l0	lda enemy_hp,x
-	bmi +
-	beq +
+	bmi .nextenemy
+	beq .nextenemy
 	ldx #2
 	jsr rnd
 	lda result
 
-	ldx .i
+	jsr msgputsenemy
+	jsr space
+
+	ldx #2
+	jsr rnd
+	lda result
+.idle	bne .eat
+	ldx #<staresmsg
+	ldy #>staresmsg
+	jsr puts
+	jmp .nextenemy
+
+.eat    ldx #2
+	jsr rnd
+	lda result
+	bne .attack
+	jsr removeobj
+	jmp .nextenemy
+
+.attack
+	ldx #<attacksmsg
+	ldy #>attacksmsg
+	jsr puts
+	ldx enemy_idx
 	adc enemy_dmg,x
 	jsr harmplayer
-+	inc .i
-	ldx .i
+
+.nextenemy
+	inc enemy_idx
+	ldx enemy_idx
 	cpx #MAX_ENEMIES
 	bcc .l0
 	rts
@@ -454,10 +507,7 @@ parsecmd
 	lda casttab,x
 	ldy casttab+1,x
 	bne .exec
-.exec	sta .target
-	sty .target+1
-.target=*+1
-	jmp $0000
+.exec	jmp callya
 
 take
 !pet "take",0
@@ -597,6 +647,7 @@ hitenemy
 	ldx #<hurtmsg
 	ldy #>hurtmsg
 	jsr msgputs
+	jsr putsenemy
 	ldx dmg
 	jsr rnd
 	lda result
@@ -854,10 +905,13 @@ scrollmsg
 	rts
 
 ;**************************************
-harmenemy
-	pha
-
-	; print <ENEMY> TAKES X DAMAGE
+msgputsenemy
+	jsr getenemyname
+	jmp msgputs
+putsenemy
+	jsr getenemyname
+	jmp puts
+getenemyname
 	ldx enemy_idx
 	lda enemy_name,x
 	asl
@@ -865,7 +919,14 @@ harmenemy
 	lda enemynametab,x
 	ldy enemynametab+1,x
 	tax
-	jsr msgputs
+	rts
+
+;**************************************
+harmenemy
+	pha
+
+	; print <ENEMY> TAKES X DAMAGE
+	jsr msgputsenemy
 
 	ldx #<takesmsg
 	ldy #>takesmsg
@@ -893,6 +954,8 @@ harmenemy
 +	ldx #<killmsg
 	ldy #>killmsg
 	jsr msgputs
+	jsr putsenemy
+	jsr exclaim
 	ldx #<gainedmsg
 	ldy #>gainedmsg
 	jsr msgputs
@@ -1223,7 +1286,7 @@ clearall
 	rts
 
 clear
-	ldx #SCREEN_W*VP_H
+	ldx #SCREEN_W*(VP_H+1)
 -	lda #' '
 	sta SCREEN-1,x
 	lda #$00
@@ -1237,6 +1300,8 @@ drawui
 	ldx #VP_W+1	; 'A'-'J'
 -	txa
 	sta SCREEN+VP_X-1,x
+	lda #$06
+	sta COLORMEM+VP_X-1,x
 	dex
 	bne -
 
@@ -1300,7 +1365,7 @@ drawstatus
 	ldx #<statusdmg
 	ldy #>statusdmg
 	jsr puts
-	lda dmg
+	lda basedmg
 	jsr putb
 
 	; draw money
@@ -1328,11 +1393,26 @@ drawstatus
 
 	; draw the gems that the player has
 	ldx gemcnt
-	beq .done
+	beq +
 -	lda #CH_GEM
 	sta SCREEN,x
 	dex
 	bne -
+
+	; color the status area
++
+--	ldy #VP_X-1
+-       lda #$02
+	sta COLORMEM,x
+	inx
+	dey
+	bpl -
+	txa
+	clc
+	adc #SCREEN_W-VP_X
+	tax
+	cpx #SCREEN_W*(VP_Y+VP_H+1)
+	bcc --
 
 .done	rts
 
@@ -1519,9 +1599,10 @@ diemsglen=*-diemsg
 harmmsg1 !pet "you receive ",0
 damagemsg !pet " damage!",0
 
-hurtmsg !pet "you hit the monster",0
+hurtmsg !pet "you hit the ",0
+attacksmsg !pet "attacks!",0
 castmsg !pet "you cast a spell",0
-killmsg !pet "you kill the monster!",0
+killmsg !pet "you kill the ",0
 takemsg !pet "picked up ",0
 gainedmsg !pet "gained ",0
 xpmsg !pet "xp",0
@@ -1578,6 +1659,8 @@ swordrainname !pet "swordrain",0
 flashname !pet "flash",0
 storemsg !pet "shop",0
 byemsg !pet "bye",0
+eatsmsg !pet "eats the ",0
+staresmsg !pet "stares at you",0
 
 hp !byte 100
 magick !byte 5

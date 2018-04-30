@@ -1562,18 +1562,18 @@ longdelay
 	rts
 
 ;**************************************
-flash
-	lda #FLASH_DMG
-	jsr dmgall
-	jsr flash2
-flash2
+; foreachvp calls the function in (Y/X) char in the viewport
+foreachvp
+	stx .fn
+	sty .fn+1
 	lda #VP_H
 	sta tmp0
 	ldx #SCREEN_W*(VP_H)+VP_W-SCREEN_W
 --	ldy #VP_W
 -	lda VIEWPORT,x
-	eor #$80
-	sta VIEWPORT,x
+
+.fn=*+1
+	jsr $ffff
 	dex
 	dey
 	bpl -
@@ -1583,7 +1583,35 @@ flash2
 	tax
 	dec tmp0
 	bpl --
+	rts
+
+;**************************************
+flash
+	lda #FLASH_DMG
+	jsr dmgall
+	ldx #<flashfn
+	ldy #>flashfn
+	jsr foreachvp
 	jsr longdelay
+	ldx #<flashfn
+	ldy #>flashfn
+	jmp foreachvp
+flashfn
+	lda VIEWPORT,x
+	eor #$80
+	sta VIEWPORT,x
+	rts
+
+;**************************************
+eye
+	lda VIEWPORT_COL,x
+	cmp #1
+	bne +
+	lda #$02
+	sta VIEWPORT_COL,x
++	rts
+eyefn
+	eor #$80
 	rts
 
 ;**************************************
@@ -1647,16 +1675,19 @@ spelltab
 !word starfall
 !word swordrain
 !word flash
+!word eye
 
 spellnames
 !word starfallname
 !word swordrainname
 !word flashname
+!word eye
 numspells=(*-spellnames)/2
 
 starfallname  !pet "starfall",0
 swordrainname !pet "swordrain",0
 flashname !pet "flash",0
+eyename !pet "eye",0
 storemsg !pet "shop",0
 byemsg !pet "bye",0
 eatsmsg !pet "eats the ",0

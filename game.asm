@@ -715,7 +715,11 @@ genscreen
 .y=tmp2
 .dst=tmp3
 .enemycnt=tmp4
+.invis=freebuff
 	jsr clear
+
+	lda #$00
+	sta .invis
 
 	;draw the ground
 	ldx #VP_W
@@ -786,8 +790,11 @@ genscreen
 	sta enemy_pos,x
 	sta .enemydst
 	sta .enemycol
-	lda enemy_col,x
-	sta .drawcol
+	jsr getenemycolor
+	cmp #$01
+	bne +
+	inc .invis
++	sta .drawcol
 
 --	ldx #$00
 -	lda (src),y
@@ -815,7 +822,13 @@ genscreen
 	bpl .genenemy
 
 	jsr drawui
-	rts
+
+	lda .invis
+	beq +
+	ldx #<invisinroommsg
+	ldy #>invisinroommsg
+	jsr msgputs
++	rts
 
 enemiestab
 !word gfx_snake
@@ -1562,6 +1575,15 @@ longdelay
 	rts
 
 ;**************************************
+getenemycolor
+	ldx #3
+	jsr rnd
+	lda result
+	bne +
+	adc #$01
++	rts
+
+;**************************************
 ; foreachvp calls the function in (Y/X) char in the viewport
 foreachvp
 	stx .fn
@@ -1604,15 +1626,17 @@ flashfn
 
 ;**************************************
 eye
+	ldx #<eyefn
+	ldy #>eyefn
+	jmp foreachvp
+eyefn
 	lda VIEWPORT_COL,x
+	and #$0f
 	cmp #1
 	bne +
 	lda #$02
 	sta VIEWPORT_COL,x
 +	rts
-eyefn
-	eor #$80
-	rts
 
 ;**************************************
 ; data
@@ -1681,7 +1705,7 @@ spellnames
 !word starfallname
 !word swordrainname
 !word flashname
-!word eye
+!word eyename
 numspells=(*-spellnames)/2
 
 starfallname  !pet "starfall",0
@@ -1692,6 +1716,7 @@ storemsg !pet "shop",0
 byemsg !pet "bye",0
 eatsmsg !pet "eats the ",0
 staresmsg !pet "stares at you",0
+invisinroommsg !pet "you sense an evil",0
 
 hp !byte 100
 magick !byte 5

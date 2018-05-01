@@ -709,6 +709,16 @@ genlevel
 	rts
 
 ;**************************************
+gencell
+	+GENCELL GC_TRAP, CH_TRAP, .next
+gencell_notrap
+	+GENCELL GC_HEART, CH_HEART, .next
+	+GENCELL GC_SPELL, CH_SPELL, .next
+	+GENCELL GC_MONEY, CH_MONEY, .next
+	+GENCELL2 GC_GEM, CH_GEM, .next
+.next   rts
+
+;**************************************
 ; generate a new screen of gameplay
 !zone genscreen
 genscreen
@@ -739,14 +749,8 @@ genscreen
 .l0
 	lda #VP_W
 	tay
-.l1
-	+GENCELL GC_HEART, CH_HEART, .next
-	+GENCELL GC_SPELL, CH_SPELL, .next
-	+GENCELL GC_MONEY, CH_MONEY, .next
-	+GENCELL GC_TRAP, CH_TRAP, .next
-	+GENCELL2 GC_GEM, CH_GEM, .next
-
-.next   cmp #$00
+.l1     jsr gencell
+	cmp #$00
 	beq +
 	sta (.dst),y
 +	dey
@@ -1591,9 +1595,9 @@ foreachvp
 	lda #VP_H
 	sta tmp0
 	ldx #SCREEN_W*(VP_H)+VP_W-SCREEN_W
+
 --	ldy #VP_W
 -	lda VIEWPORT,x
-
 .fn=*+1
 	jsr $ffff
 	dex
@@ -1608,6 +1612,7 @@ foreachvp
 	rts
 
 ;**************************************
+!zone flash
 flash
 	lda #FLASH_DMG
 	jsr dmgall
@@ -1625,6 +1630,7 @@ flashfn
 	rts
 
 ;**************************************
+!zone eye
 eye
 	ldx #<eyefn
 	ldy #>eyefn
@@ -1636,7 +1642,18 @@ eyefn
 	bne +
 	lda #$02
 	sta VIEWPORT_COL,x
-+	rts
+	rts
++	lda VIEWPORT,x
+	cmp #CH_TRAP
+	bne .done
+	stx tmp1
+	jsr gencell_notrap
+	cmp #$00
+	bne +
+	lda #CH_HEART
++	ldx tmp1
+	sta VIEWPORT,x
+.done	rts
 
 ;**************************************
 ; data

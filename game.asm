@@ -23,7 +23,9 @@ src=tmp2
 !source "values.inc"
 
 SHORT_DELAY=10
+MID_DELAY=40
 LONG_DELAY=90
+VLONG_DELAY=$ff
 
 SCREEN=$1e00
 SCREEN_W=22
@@ -165,6 +167,7 @@ start
 	bpl -
 	lda #$00
 	sta name+7
+	sta enemy_idx
 	jsr clearall
 
 	; srand
@@ -189,8 +192,7 @@ rvson   lda #$12
 rvsoff  lda #$92
 	!byte $2c
 space   lda #' '
-	jsr $ffd2
-	rts
+	jmp $ffd2
 
 ;**************************************
 setrow
@@ -506,7 +508,6 @@ parsecmd
 	bne +
 	lda casttab,x
 	ldy casttab+1,x
-	bne .exec
 .exec	jmp callya
 
 take
@@ -558,6 +559,7 @@ clrcell
 	lda #' '
 	ldx cellpos
 	sta VIEWPORT,x
+	jsr sfx_take
 	rts
 takeheart
 	ldx #4
@@ -629,14 +631,15 @@ castenemy
 	ldy #>castmsg
 	jsr msgputs
 
+	;jsr sfx_spell2
+
 	ldx spell
 	lda spelltab,x
 	sta .anim
 	lda spelltab+1,x
 	sta .anim+1
 .anim=*+1
-	jsr $ffff
-	rts
+	jmp $ffff
 
 ;**************************************
 hiterr
@@ -648,6 +651,7 @@ hitenemy
 	ldy #>hurtmsg
 	jsr msgputs
 	jsr putsenemy
+	jsr sfx_hit
 	ldx dmg
 	jsr rnd
 	lda result
@@ -703,10 +707,8 @@ genlevel
 	jsr rnd
 	lda result
 	beq .shop
-	jsr genscreen
-	rts
-.shop   jsr shop
-	rts
+	jmp genscreen
+.shop   jmp shop
 
 ;**************************************
 gencell
@@ -795,6 +797,8 @@ genscreen
 	sta .enemydst
 	sta .enemycol
 	jsr getenemycolor
+	ldx .enemycnt
+	sta enemy_col,x
 	cmp #$01
 	bne +
 	inc .invis
@@ -918,8 +922,7 @@ scrollmsg
 	bpl -
 	dec tmp0
 	bne --
-	jsr clrmsg
-	rts
+	jmp clrmsg
 
 ;**************************************
 msgputsenemy
@@ -993,7 +996,7 @@ harmenemy
 	ldy #>xpmsg
 	jsr puts
 
-	jsr kill_enemy
+	jmp kill_enemy
 ++	rts
 
 ;**************************************
@@ -1460,8 +1463,7 @@ printtake
 	jsr putb
 	jsr space
 	pla
-	jsr $ffd2
-	rts
+	jmp $ffd2
 
 ;**************************************
 clrmsg
@@ -1480,8 +1482,7 @@ putb
 	jsr $dddd
 	ldx #<$100
 	ldy #>$100
-	jsr puts
-	rts
+	jmp puts
 
 ;**************************************
 msgputs
@@ -1493,8 +1494,7 @@ msgputs
 	jsr $e50c
 	ldx tmp4
 	ldy tmp5
-	jsr puts
-	rts
+	jmp puts
 
 ;**************************************
 ; swordrain does large damage to all enemies
@@ -1507,12 +1507,17 @@ swordrain
 !zone starfall
 starfall
 .line_bak=freebuff
+.snd=tmp0
+	lda #$ff
+	sta .snd
 	ldx #STARFALL_DMG
 	lda #CH_STAR
 fallspell
 	sta .ch
 	txa
 	pha
+	ldx #$ff
+	stx $900e
 	ldx #VP_W-1
 .l0	ldy #VP_W-1
 .l1	lda VIEWPORT,x
@@ -1524,7 +1529,13 @@ fallspell
 	dey
 	bpl .l1
 
-	jsr shortdelay
+	lda .snd
+	sta $900c
+	sec
+	sbc #5
+	sta .snd
+
+	jsr middelay
 	txa
 	clc
 	adc #VP_W
@@ -1566,11 +1577,20 @@ dmgall
 
 ;**************************************
 ; delay functions (clobber .A and .Y)
+veryshortdelay
+	ldy #$01
+	!byte $2c
+middelay
+	ldy #MID_DELAY
+	!byte $2c
 shortdelay
 	ldy #SHORT_DELAY
 	!byte $2c
 longdelay
 	ldy #LONG_DELAY
+	!byte $2c
+verylongdelay
+	ldy #VLONG_DELAY
 	lda #10
 -	cmp $9004
 	bne *-3
@@ -1627,6 +1647,56 @@ flashfn
 	lda VIEWPORT,x
 	eor #$80
 	sta VIEWPORT,x
+	rts
+
+;**************************************
+sfx_take
+	ldy #$00
+	!byte $2c
+sfx_hit
+	ldy #$01
+	jsr sfx_clear
+	lda #$af
+	sta $900c,y
+	lda #$09
+	sta $900e
+	jsr verylongdelay
+	jmp sfx_clear
+
+;**************************************
+sfx_spell1
+	jsr sfx_clear
+	ldx #$af
+	stx $900e
+-	jsr veryshortdelay
+	txa
+	sta $900c
+	sta $900e
+	dex
+	bmi -
+	lda #$00
+	jmp sfx_clear
+
+;**************************************
+sfx_spell2
+	jsr sfx_clear
+	ldx #$ff
+	stx $900e
+-	jsr veryshortdelay
+	txa
+	sta $900a
+	dex
+	bmi -
+	lda #$00
+	jmp sfx_clear
+
+;**************************************
+sfx_clear
+	lda #$00
+	ldx #$0e-$0a
+-	sta $900a,x
+	dex
+	bpl -
 	rts
 
 ;**************************************
@@ -1783,7 +1853,7 @@ gfx_bat
 
 spell !byte 0
 
-freebuff
+freebuff=$120
 
 prg_size=*-basicstub
 remaining_bytes=SCREEN - *

@@ -18,6 +18,26 @@ width=tmp0
 height=tmp1
 src=tmp2
 
+armorturns = $120	; turns before ARMOR spell wears off
+unbuffedarmor=$121
+
+; enemy tables: entries contain 1 byte per enemy
+enemy_hp = $123
+enemy_pos = $125
+enemy_w = $127
+enemy_h = $129
+enemy_dmg = $12b
+enemy_col = $12d
+enemy_name = $12f
+
+spell = $131
+
+lvl = $132
+xp = $133
+name = $134
+
+freebuff=$033c
+
 ;**************************************
 ; constants
 !source "values.inc"
@@ -123,7 +143,7 @@ basicstub
 ;**************************************
 start
 	jsr clearall
-
+	;
 	; display title
 	ldx #5
 	ldy #0
@@ -179,7 +199,17 @@ start
 	jsr drawstatus
 	jsr genscreen
 mainloop
-	jsr drawstatus
+	lda armorturns
+	beq +
+	dec armorturns
+	bne +
+	lda unbuffedarmor
+	sta armor
+	ldx #<spellendsmsg
+	ldy #>spellendsmsg
+	jsr msgputs
+
++	jsr drawstatus
 	jsr parsecmd
 	jsr enemymove
 	jmp mainloop
@@ -253,33 +283,6 @@ addenemy
 	rts
 
 ;**************************************
-removeobj
-	ldx #7
-	jsr rnd
-	ldx result
--	lda COLORMEM,x
-	and #$0f
-	bne +
-	lda SCREEN,x
-	cmp #' '
-	bne .rem
-+	dex
-	bne -
-	; no target found
-	ldx #<staresmsg
-	ldy #>staresmsg
-	jmp puts
-
-.rem    pha
-	ldx #<eatsmsg
-	ldy #>eatsmsg
-	jsr space
-	pla
-	ldy $d3
-	sta ($d1),y
-	rts
-
-;**************************************
 enemymove
 	ldx #0
 	stx enemy_idx
@@ -296,17 +299,10 @@ enemymove
 	ldx #2
 	jsr rnd
 	lda result
-.idle	bne .eat
+.idle	bne .attack
 	ldx #<staresmsg
 	ldy #>staresmsg
 	jsr puts
-	jmp .nextenemy
-
-.eat    ldx #2
-	jsr rnd
-	lda result
-	bne .attack
-	jsr removeobj
 	jmp .nextenemy
 
 .attack
@@ -899,7 +895,6 @@ callyx
 .target=*+1
 	jmp $ffff
 
-
 ;**************************************
 ; call the function in (Y/A)
 !zone callya
@@ -1267,6 +1262,7 @@ shop
 	sta hp
 	rts
 .buyarmor
+	sta unbuffedarmor
 	sta armor
 	rts
 .buysword
@@ -1650,6 +1646,17 @@ flashfn
 	rts
 
 ;**************************************
+!zone skin
+skin
+	lda #SKIN_ARMOR_BONUS
+	clc
+	adc lvl
+	sta armor
+	lda #SKIN_TURNS
+	sta armorturns
+	jmp sfx_spell2
+
+;**************************************
 sfx_take
 	ldy #$00
 	!byte $2c
@@ -1787,23 +1794,27 @@ spelltab
 !word swordrain
 !word flash
 !word eye
+!word skin
 
 spellnames
 !word starfallname
 !word swordrainname
 !word flashname
 !word eyename
+!word skinname
 numspells=(*-spellnames)/2
 
 starfallname  !pet "starfall",0
 swordrainname !pet "swordrain",0
 flashname !pet "flash",0
 eyename !pet "eye",0
+skinname !pet "skin",0
+
 storemsg !pet "shop",0
 byemsg !pet "bye",0
-eatsmsg !pet "eats the ",0
 staresmsg !pet "stares at you",0
 invisinroommsg !pet "you sense an evil",0
+spellendsmsg !pet "your spell ends"
 
 hp !byte 100
 magick !byte 5
@@ -1814,15 +1825,6 @@ basedmg !byte 1 ; min damage
 spelldmg !byte 5 ; spell max damage (2^n)
 gemcnt !byte 0
 
-; enemy tables: entries contain 1 byte per enemy
-enemy_hp !byte 1,0
-enemy_pos !byte 0,0
-enemy_w !byte 0,0
-enemy_h !byte 0,0
-enemy_dmg !byte 0,0
-enemy_col !byte 2,6
-enemy_name !byte 0,1
-
 enemynametab
 !word snakename
 !word batname
@@ -1830,10 +1832,6 @@ enemynametab
 enemynames
 snakename !pet "snake",0
 batname !pet "bat",0
-
-lvl !byte 0
-xp !byte 0
-name !fill 8,' '
 
 ; graphics
 gfx_snake
@@ -1850,10 +1848,6 @@ gfx_bat
 !byte  2	; base damage
 !byte  233,223,223,233,233,223,105,95
 !byte  174,174,105,95,32,32,34,34,32,32
-
-spell !byte 0
-
-freebuff=$120
 
 prg_size=*-basicstub
 remaining_bytes=SCREEN - *

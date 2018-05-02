@@ -372,8 +372,8 @@ parsecmd
 .chkcast
 	cpy #'C'
 	bne .chkhit
-	ldx #<cast
-	ldy #>cast
+	ldx #<castcmd
+	ldy #>castcmd
 	jsr puts
 	lda #$80
 	eor .input
@@ -394,7 +394,7 @@ parsecmd
 	tax
 	jsr puts
 	jsr space
-	jmp .getcoord
+	jmp cast
 .chkhit
 	cpy #'H'
 	bne +
@@ -440,6 +440,7 @@ parsecmd
 	jsr hicell
 	stx cellpos
 
+.confirmorcancel
 	jsr $ffe4
 	beq *-3
 	ldx cellpos
@@ -496,23 +497,17 @@ parsecmd
 	ldy hittab+1,x
 	bne .exec
 +	cmp #'T'
-	bne +
+	bne .exec
 	lda taketab,x
 	ldy taketab+1,x
-	bne .exec
-+	cmp #'C'
-	bne +
-	lda casttab,x
-	ldy casttab+1,x
 .exec	jmp callya
 
 take
 !pet "take",0
 hit
 !pet "hit",0
-cast
+castcmd
 !pet "cast ",0
-
 
 HEART_IDX = 0
 ENEMY_IDX = 1
@@ -528,14 +523,6 @@ taketab
 !word takegem
 !word takemoney
 !word taketrap
-
-casttab
-!word casterr
-!word castenemy
-!word casterr
-!word casterr
-!word casterr
-!word casterr
 
 hittab
 !word hiterr
@@ -618,11 +605,7 @@ taketrap
 	jmp clrcell
 
 ;**************************************
-casterr
-	ldx #<canttarget
-	ldy #>canttarget
-	jmp cmderr
-castenemy
+cast
 	ldx #<castmsg
 	ldy #>castmsg
 	jsr msgputs
@@ -1003,12 +986,23 @@ levelup
 
 ;**************************************
 harmplayer
-	pha
+	sec
+	sbc armor
+	bpl +
+	lda #$00
++	pha
 	sta tmp0
 	lda hp
 	sec
 	sbc tmp0
 	sta hp
+
+	lda #$00
+	sta $900f
+	jsr sfx_hit
+	lda #$03|$08|(1<<4)
+	sta $900f
+
 	ldx #<harmmsg1
 	ldy #>harmmsg1
 	jsr msgputs
@@ -1495,6 +1489,9 @@ msgputs
 ;**************************************
 ; swordrain does large damage to all enemies
 swordrain
+.snd=tmp0
+	lda #$c4
+	sta .snd
 	ldx #SWORDRAIN_DMG
 	lda #CH_SWORD
 	jmp fallspell
@@ -1550,6 +1547,7 @@ fallspell
 	tax
 	cpx #SCREEN_W*VP_H
 	bcc .l0
+	jsr sfx_clear
 	pla
 	jmp dmgall
 
@@ -1636,9 +1634,11 @@ flash
 	ldy #>flashfn
 	jsr foreachvp
 	jsr longdelay
+	jsr sfx_spell2
 	ldx #<flashfn
 	ldy #>flashfn
 	jmp foreachvp
+
 flashfn
 	lda VIEWPORT,x
 	eor #$80

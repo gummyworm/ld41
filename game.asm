@@ -453,14 +453,16 @@ parsecmd
 +	jsr hicell	; unhighlight
 	lda VIEWPORT,x
 	cmp #' '
-	bne +
-	ldx #<nothingmsg
+	beq +
+	cmp #GROUND_CHAR
+	bne ++
++	ldx #<nothingmsg
 	ldy #>nothingmsg
 	jsr msgputs
 	pla
 	jmp parsecmd
 
-+	pla
+++	pla
 	cmp #CH_HEART
 	bne +
 	ldx #HEART_IDX
@@ -542,8 +544,7 @@ clrcell
 	lda #' '
 	ldx cellpos
 	sta VIEWPORT,x
-	jsr sfx_take
-	rts
+	jmp sfx_take
 takeheart
 	ldx #4
 	jsr rnd
@@ -999,7 +1000,7 @@ harmplayer
 
 	lda #$00
 	sta $900f
-	jsr sfx_hit
+	jsr sfx_harm
 	lda #$03|$08|(1<<4)
 	sta $900f
 
@@ -1657,14 +1658,18 @@ skin
 	jmp sfx_spell2
 
 ;**************************************
-sfx_take
+sfx_hit
 	ldy #$00
 	!byte $2c
-sfx_hit
+sfx_harm
 	ldy #$01
-	jsr sfx_clear
 	lda #$af
-	sta $900c,y
+	sta $900d
+	!byte $2c
+sfx_take
+	ldy #$02
+	lda #$af
+	sta $900a,y
 	lda #$09
 	sta $900e
 	jsr verylongdelay

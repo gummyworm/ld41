@@ -11,8 +11,8 @@ basicstub
 !byte $9e
 !text "4109",0
 !word 0
-.start
-	jsr getname
+	jmp getname
+start
 	jsr clearall
 	jsr drawstatus
 	jsr genscreen
@@ -1754,50 +1754,70 @@ remaining_bytes=SCREEN - *
 ;**************************************
 ; TITLE
 ; code beyond here is located in $1e00 and cannot be used after starting the game
-title1=SCREEN
-title2=(SCREEN+SCREEN_W*5)
-*=title1
-!scr "you must find 3 magic gems to restore power to the staff of truth"
-!fill title2-*,$20
-*=title2
-!scr "  enter your name to   "
-!scr "      begin            "
+*=SCREEN
+!source "title.asm"
 titleend
+
+WING1=SCREEN_W*2-4
+WING2=SCREEN_W*2-2
 
 ;**************************************
 getname
-	ldx #titleend-SCREEN
--	lda #$00
-	sta $9600-1,x
-	lda #$01
-	sta $9600+(titleend-SCREEN)-1,x
+	lda #$00
+	tax
+-	sta $9600,x
+	sta $9700,x
+	sta $100,x
 	dex
 	bne -
 
-	ldx #zerodatalen
-	lda #$00
--	sta zerodata,x
+	ldx #(SCREEN+(SCREEN_W*SCREEN_H)-titleend)+1
+	lda #$01
+-	sta $9700+<titleend-1,x
 	dex
-	bpl -
-	ldx $d3
-	dex
+	bne -
 
-	ldx #14
+	lda #$90	; black
+	jsr $ffd2
+
+	ldx #17
 	ldy #0
 	jsr $e50c
--	jsr $ffe4
+-	lda SCREEN+WING1
+	eor #$1f
+	sta SCREEN+WING1
+	lda SCREEN+WING2
+	eor #$02
+	sta SCREEN+WING2
+	jsr middelay
+
+	jsr $ffe4
 	cmp #$00
 	beq -
 	cmp #$0d
 	beq .storename
 	jsr $ffd2
+
+	; validate/update cursor pos
+	sec
+	jsr $fff0
+	cpy #7
+	bne +
+	dey
+	clc
++	bcc +
+	ldy #0
++	ldx #17
+	clc
+	jsr $fff0
+
 	jmp -
 
 .storename
 	sec
 	jsr $fff0
 	dey
--	lda SCREEN+(SCREEN_W*14),y
+-	lda SCREEN+(SCREEN_W*17),y
 	clc
 	adc #'A'-1
 	sta name,y
@@ -1812,4 +1832,6 @@ getname
 	sta rndval
 	jsr rnd
 	sta rndval+1
-	rts
+	jmp start
+
+titlecodeend=*

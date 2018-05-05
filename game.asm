@@ -1,135 +1,7 @@
 !to "game.prg",cbm
-
-;**************************************
-; zeropage
-rndval=$f0
-result=$f2
-
-tmp0=$fa
-tmp1=$fb
-tmp2=$fc
-tmp3=$fd
-tmp4=$fe
-tmp5=$22
-cellpos=$bb
-enemy_idx=$bc
-
-width=tmp0
-height=tmp1
-src=tmp2
-
-armorturns = $120	; turns before ARMOR spell wears off
-unbuffedarmor=$121
-
-; enemy tables: entries contain 1 byte per enemy
-enemy_hp = $123
-enemy_pos = $125
-enemy_w = $127
-enemy_h = $129
-enemy_dmg = $12b
-enemy_col = $12d
-enemy_name = $12f
-
-spell = $131
-
-lvl = $132
-xp = $133
-name = $134
-
-freebuff=$033c
-
-;**************************************
-; constants
+!source "zp.inc"
 !source "values.inc"
-
-SHORT_DELAY=10
-MID_DELAY=40
-LONG_DELAY=90
-VLONG_DELAY=$ff
-
-SCREEN=$1e00
-SCREEN_W=22
-SCREEN_H=23
-COLORMEM=$9600
-VP_W=9
-VP_H=10
-VP_X=8
-VP_Y=0
-STATUS_LINE=1
-LEVEL_LINE=VP_Y+VP_H+1
-INPUT_LINE=22
-STORE_LINE=VP_Y+1
-STORE_COL=VP_X-1
-STORE_W=SCREEN_W-STORE_COL
-SALE_VAL_COL=SCREEN_W-8
-COST_COL=SCREEN_W-5
-MSG_LINE=14
-MSG_H=7
-
-VIEWPORT=SCREEN+VP_X+(SCREEN_W*VP_Y)
-VIEWPORT_COL=COLORMEM+VP_X+SCREEN_W
-VIEWPORT_END=SCREEN+VP_X+VP_W+SCREEN_W*SCREEN_H
-
-CH_STAR=42
-CH_SWORD=30
-
-; GC: generation chance (1/(2^GC_XXX))
-; CH: character
-GC_HEART=7
-CH_HEART=83
-
-GC_SPELL=6
-CH_SPELL=42
-
-GC_MONEY=6
-CH_MONEY=36
-
-GC_GEM=1
-CH_GEM=$5a
-
-GC_TRAP=6
-CH_TRAP=63
-
-GROUND_CHAR=102
-
-GEMS_TO_WIN=3
-XP_PER_KILL=10
-XP_RAND=2
-XP_TO_LVLUP=100
-
-MAX_ENEMIES=2
-MAX_FOR_SALE=6
-
-TRAP_DMG=6
-
-;**************************************
-; macros
-!macro GENCELL .chance, .char, donelbl {
-	ldx #.chance
-	jsr rnd
-	lda #$00
-	ldx result
-	bne +
-	lda #.char
-	jmp donelbl
-+
-}
-
-!macro GENCELL2 .chance, .char, donelbl {
-	ldx #.chance
-	jsr rnd
-	lda result
-	php
-	jsr rnd
-	lda #$00
-	plp
-	bne +
-	ldx result
-	bne +
-	lda #.char
-	jmp donelbl
-+
-}
+!source "macros.inc"
 
 ;**************************************
 *=$1001
@@ -139,63 +11,9 @@ basicstub
 !byte $9e
 !text "4109",0
 !word 0
-
-;**************************************
-start
-	jsr clearall
-	;
-	; display title
-	ldx #5
-	ldy #0
-	jsr $e50c
-	ldx #<titlemsg
-	ldy #>titlemsg
-	jsr puts
-
-	; wait for user to begin
--	jsr $ffe4
-	cmp #$00
-	beq -
-
-	; what is your name?
-	ldx #13
-	ldy #0
-	jsr $e50c
-	ldx #<enternamemsg
-	ldy #>enternamemsg
-	jsr puts
-
-	ldx #14
-	ldy #0
-	jsr $e50c
--	jsr $ffe4
-	cmp #$00
-	beq -
-	cmp #$0d
-	beq .start
-	jsr $ffd2
-	jmp -
-
 .start
-	ldx $d3
-	dex
--	lda SCREEN+(SCREEN_W*14),x
-	clc
-	adc #'A'-1
-	sta name,x
-	dex
-	bpl -
-	lda #$00
-	sta name+7
-	sta enemy_idx
+	jsr getname
 	jsr clearall
-
-	; srand
-	lda $9004
-	sta rndval
-	jsr rnd
-	sta rndval+1
-
 	jsr drawstatus
 	jsr genscreen
 mainloop
@@ -266,6 +84,9 @@ src=tmp2
 	adc enemy_dmg
 	sta enemy_dmg,x
 	iny
+	lda (src),y
+	sta enemy_name,x
+	iny
 
 	rts
 
@@ -325,6 +146,8 @@ enemymove
 parsecmd
 .input=SCREEN+SCREEN_W*INPUT_LINE
 .action=tmp2
+.row=tmp3
+.col=tmp4
 	; clear the input line
 	lda #' '
 	ldx #SCREEN_W
@@ -434,6 +257,8 @@ parsecmd
 	tay
 	pla
 	tax
+	stx .col
+	sty .row
 
 	jsr getcell
 	pha
@@ -443,14 +268,57 @@ parsecmd
 .confirmorcancel
 	jsr $ffe4
 	beq *-3
-	ldx cellpos
-	cmp #$0d
-	beq +
+
+	pha
+	lda cellpos
+	jsr unhicell	; unhighlight
 	pla
-	jsr hicell	; unhighlight
+
+	cmp #$0d
+	beq .doaction
+	cmp #$14
+	bne .checkmove
 	jmp parsecmd	; player cancelled action
 
-+	jsr hicell	; unhighlight
+.checkmove
+	ldx .col
+	ldy .row
+	; check cursor keys
+	cmp #$11	; down
+	bne +
+	iny
+	cpy #VP_H
+	bcc +
+	dey
++	cmp #$91	; up
+	bne +
+	dey
+	bpl +
+	iny
+
++	cmp #$1d	; right
+	bne +
+	inx
+	cpx #VP_W+1
+	bcc +
+	dex
++	cmp #$9d	; left
+	bne .updatepos
+	dex
+	bpl .updatepos
+	inx
+
+.updatepos
+	stx .col
+	sty .row
+	jsr getcell
+	stx cellpos
+	txa
+	jsr hicell	; highlight new position
+	jmp .confirmorcancel
+
+.doaction
+	ldx cellpos
 	lda VIEWPORT,x
 	cmp #' '
 	beq +
@@ -660,14 +528,45 @@ getcell
 +	lda VIEWPORT,x
 	rts
 
+;**************************************
+; unhighlights the last highlighted cell
+!zone highlight
+unhicell
+.unhi
+.lastpos=*+1
+	ldx #$00
+.lastchar=*+1
+	lda #$00
+	sta VIEWPORT,x
+.lastcol=*+1
+	lda #$00
+	sta VIEWPORT_COL,x
+	rts
+
+;**************************************
 ; highlights the cell whose viewport offset is given in .X
 hicell
+	stx .lastpos
 	lda VIEWPORT,x
+	sta .lastchar
+	lda VIEWPORT_COL,x
+	sta .lastcol
+	cmp #$01
+	beq +
+	; target-to-highlight is invis
+	lda #$a0
+	sta VIEWPORT,x
+	lda #$00
+	sta VIEWPORT_COL,x
+	rts
+
++	lda VIEWPORT,x
 	eor #$80
 	sta VIEWPORT,x
 	rts
 
 ;**************************************
+!zone win
 win
 	jsr clearall
 	lda #$66|8
@@ -1740,9 +1639,6 @@ eyefn
 ;**************************************
 ; data
 !zone data
-titlemsg
-!pet $90,"you must find 3 magic gems to restore power to the staff of truth",$0d,$0d,$0d
-!pet "press any key to begin",0
 
 diemsg !pet $90,"you have died!"
 diemsglen=*-diemsg
@@ -1781,7 +1677,6 @@ statusxp    !pet " xp:",0
 statusarmor !pet 113,":",0
 statusdmg   !pet 97,":",0
 
-enternamemsg !pet "what is your name?",0
 runmsg !pet "you ran away!",0
 runfailmsg !pet "couldn't get away!",0
 takesmsg !pet " takes ",0
@@ -1823,12 +1718,9 @@ spellendsmsg !pet "your spell ends"
 
 hp !byte 100
 magick !byte 5
-armor !byte 0
-money !byte 10
 dmg !byte 2 	; max bonus damage (2^n)
 basedmg !byte 1 ; min damage
 spelldmg !byte 5 ; spell max damage (2^n)
-gemcnt !byte 0
 
 enemynametab
 !word snakename
@@ -1843,6 +1735,7 @@ gfx_snake
 !byte  6,4	; 6x4
 !byte  5	; max HP
 !byte  2	; base damage
+!byte  0	; name index
 !byte  233,215,208,32,32,32,34,160
 !byte  160,32,32,223,32,32,224,227
 !byte  227,105,32,32,95,224,105,32
@@ -1851,8 +1744,72 @@ gfx_bat
 !byte  6,3	; 6x4
 !byte  2	; max HP
 !byte  2	; base damage
+!byte  1	; name index
 !byte  233,223,223,233,233,223,105,95
 !byte  174,174,105,95,32,32,34,34,32,32
 
 prg_size=*-basicstub
 remaining_bytes=SCREEN - *
+
+;**************************************
+; TITLE
+; code beyond here is located in $1e00 and cannot be used after starting the game
+title1=SCREEN
+title2=(SCREEN+SCREEN_W*5)
+*=title1
+!scr "you must find 3 magic gems to restore power to the staff of truth"
+!fill title2-*,$20
+*=title2
+!scr "  enter your name to   "
+!scr "      begin            "
+titleend
+
+;**************************************
+getname
+	ldx #titleend-SCREEN
+-	lda #$00
+	sta $9600-1,x
+	lda #$01
+	sta $9600+(titleend-SCREEN)-1,x
+	dex
+	bne -
+
+	ldx #zerodatalen
+	lda #$00
+-	sta zerodata,x
+	dex
+	bpl -
+	ldx $d3
+	dex
+
+	ldx #14
+	ldy #0
+	jsr $e50c
+-	jsr $ffe4
+	cmp #$00
+	beq -
+	cmp #$0d
+	beq .storename
+	jsr $ffd2
+	jmp -
+
+.storename
+	sec
+	jsr $fff0
+	dey
+-	lda SCREEN+(SCREEN_W*14),y
+	clc
+	adc #'A'-1
+	sta name,y
+	dey
+	bpl -
+	lda #$00
+	sta name+7
+	sta enemy_idx
+
+	; srand
+	lda $9004
+	sta rndval
+	jsr rnd
+	sta rndval+1
+	rts

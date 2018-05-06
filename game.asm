@@ -1400,6 +1400,8 @@ msgputs
 ; swordrain does large damage to all enemies
 swordrain
 .snd=tmp0
+	lda #SWORDRAIN_COST
+	jsr updatemana
 	lda #$c4
 	sta .snd
 	ldx #SWORDRAIN_DMG
@@ -1411,6 +1413,8 @@ swordrain
 starfall
 .line_bak=freebuff
 .snd=tmp0
+	lda #STARFALL_COST
+	jsr updatemana
 	lda #$ff
 	sta .snd
 	ldx #STARFALL_DMG
@@ -1536,8 +1540,25 @@ foreachvp
 	rts
 
 ;**************************************
+updatemana
+	sta tmp0
+	lda magick
+	sec
+	sbc tmp0
+	bpl +
+	ldx #<nomanamsg
+	ldy #>nomanamsg
+	pla		; eat return address
+	pla
+	jmp msgputs
++	sta magick
+	rts
+
+;**************************************
 !zone flash
 flash
+	lda #FLASH_COST
+	jsr updatemana
 	lda #FLASH_DMG
 	jsr dmgall
 	ldx #<flashfn
@@ -1558,6 +1579,7 @@ flashfn
 ;**************************************
 !zone skin
 skin
+	lda #SKIN_COST
 	lda #SKIN_ARMOR_BONUS
 	clc
 	adc lvl
@@ -1623,6 +1645,7 @@ sfx_clear
 ;**************************************
 !zone eye
 eye
+	lda #EYE_COST
 	ldx #<eyefn
 	ldy #>eyefn
 	jmp foreachvp
@@ -1720,6 +1743,8 @@ flashname !pet "flash",0
 eyename !pet "eye",0
 skinname !pet "skin",0
 
+nomanamsg !pet "no mana",0
+
 storemsg !pet "shop",0
 byemsg !pet "bye",0
 staresmsg !pet "stares at you",0
@@ -1727,7 +1752,7 @@ invisinroommsg !pet "you sense an evil",0
 spellendsmsg !pet "your spell ends"
 
 hp !byte 100
-magick !byte 5
+magick !byte 100
 dmg !byte 2 	; max bonus damage (2^n)
 basedmg !byte 1 ; min damage
 spelldmg !byte 5 ; spell max damage (2^n)
@@ -1773,8 +1798,6 @@ WING2=SCREEN_W*2-2
 
 ;**************************************
 getname
-	ldx #$00
-	stx $cc
 -	lda #$00
 	sta $9600,x
 	sta $9700,x
@@ -1802,6 +1825,8 @@ getname
 	sta SCREEN+WING2
 	jsr middelay
 
+	ldx #$00
+	stx $cc
 	jsr $ffe4
 	beq -
 	cmp #$0d

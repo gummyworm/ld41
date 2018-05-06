@@ -6,6 +6,12 @@ STARFALL_DMG = 20
 SKIN_ARMOR_BONUS = 5
 SKIN_TURNS = 20
 
+FLASH_COST = 2
+EYE_COST = 3
+SKIN_COST = 4
+SWORDRAIN_COST = 10
+STARFALL_COST = 15
+
 ;**************************************
 ; shop constants
 HEALTH_COST = 10

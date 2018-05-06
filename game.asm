@@ -272,16 +272,14 @@ parsecmd
 	sty .row
 
 	jsr getcell
+	stx cellpos
 	pha
 	jsr hicell
-	stx cellpos
 
 .confirmorcancel
 	jsr getb
-	beq *-3
 
 	pha
-	lda cellpos
 	jsr unhicell	; unhighlight
 	pla
 
@@ -337,37 +335,36 @@ parsecmd
 	bne ++
 +	ldx #<nothingmsg
 	ldy #>nothingmsg
-	jsr msgputs
 	pla
-	jmp parsecmd
+	jmp msgputs
 
 ++	pla
 	cmp #CH_HEART
 	bne +
-	ldx #HEART_IDX
+	ldy #HEART_IDX
 +	cmp #CH_GEM
 	bne +
-	ldx #GEM_IDX
+	ldy #GEM_IDX
 +	cmp #CH_SPELL
 	bne +
-	ldx #SPELL_IDX
+	ldy #SPELL_IDX
 +	cmp #CH_MONEY
 	bne +
-	ldx #MONEY_IDX
+	ldy #MONEY_IDX
 +	cmp #CH_TRAP
 	bne +
-	ldx #TRAP_IDX
+	ldy #TRAP_IDX
 +	lda VIEWPORT_COL,x
 	and #$0f
 	beq +	; black= not enemy, !black= enemy
-	ldx #-1
+	ldx #$00
 -	inx
-	cmp enemy_col,x
+	cmp enemy_col-1,x
 	bne -
 	stx enemy_idx
-	ldx #ENEMY_IDX
+	ldy #ENEMY_IDX
 
-+	txa
++	tya
 	asl
 	tax
 
@@ -561,9 +558,10 @@ hicell
 	lda VIEWPORT,x
 	sta .lastchar
 	lda VIEWPORT_COL,x
+	and #$0f
 	sta .lastcol
 	cmp #$01
-	beq +
+	bne +
 	; target-to-highlight is invis
 	lda #$a0
 	sta VIEWPORT,x
@@ -908,7 +906,7 @@ harmplayer
 	sbc tmp0
 	sta hp
 
-	lda #$00
+	lda #$02|$08|(1<<4)
 	sta $900f
 	jsr sfx_harm
 	lda #$03|$08|(1<<4)
@@ -1775,6 +1773,7 @@ WING2=SCREEN_W*2-2
 ;**************************************
 getname
 	ldx #$00
+	stx $cc
 -	lda #$00
 	sta $9600,x
 	sta $9700,x
@@ -1802,7 +1801,8 @@ getname
 	sta SCREEN+WING2
 	jsr middelay
 
-	jsr getb
+	jsr $ffe4
+	beq -
 	cmp #$0d
 	beq .storename
 	jsr $ffd2

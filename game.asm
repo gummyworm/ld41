@@ -338,6 +338,7 @@ parsecmd
 	pla
 	jmp msgputs
 
+	; get the type of cell that the action applies to (heart, enemy, etc.)
 ++	pla
 	cmp #CH_HEART
 	bne +
@@ -356,18 +357,18 @@ parsecmd
 	ldy #TRAP_IDX
 +	lda VIEWPORT_COL,x
 	and #$0f
-	beq +	; black= not enemy, !black= enemy
-	ldx #$00
--	inx
-	cmp enemy_col-1,x
-	bne -
-	stx enemy_idx
+	beq ++	; black= not enemy, !black= enemy
+	ldy #$01
+	cpx #SKY_ENEMY_MAXPOS
+	bcc +
+	dey
++	sty enemy_idx
 	ldy #ENEMY_IDX
 
-+	tya
+	; look up the handler for the action and cell type
+++	tya
 	asl
 	tax
-
 	lda .action
 	cmp #'H'
 	bne +

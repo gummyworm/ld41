@@ -46,6 +46,8 @@ VIEWPORT=SCREEN+VP_X+(SCREEN_W*VP_Y)
 VIEWPORT_COL=COLORMEM+VP_X+(SCREEN_W*VP_Y)
 VIEWPORT_END=SCREEN+VP_X+VP_W+SCREEN_W*SCREEN_H
 
+SKY_ENEMY_MAXPOS=<((SCREEN_W*VP_H)-(SCREEN_W*5))
+
 ;**************************************
 ; character/visual constants
 CH_STAR=42

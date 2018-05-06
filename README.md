@@ -1,7 +1,7 @@
 # Wild Green
 ### An adventure RPG for the Commodore Vic-20.
 
-![ScreenShot](screenshot.png =320x) ![ScreenShot](screenshot2.png =320x)
+![ScreenShot](screenshot.png) ![ScreenShot](screenshot2.png)
 
 ### System Requirements
 Unexpanded Commodore Vic-20 (PAL/NTSC).

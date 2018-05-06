@@ -44,8 +44,18 @@ space   lda #' '
 
 ;**************************************
 setrow
+	inc $cc
 	ldy #$00
 	jmp $e50c
+
+;**************************************
+getb
+	lda #$00
+	sta $cc
+-	jsr $ffe4
+	beq -
+	inc $cc
+	rts
 
 ;**************************************
 ;loads the data associated with the enemy in <X/>Y
@@ -157,8 +167,9 @@ parsecmd
 
 	ldx #INPUT_LINE
 	ldy #0
+	sty $cc
 	jsr $e50c
--	jsr $ffe4
+-	jsr getb
 	tay
 	beq -
 	sty .action
@@ -202,7 +213,7 @@ parsecmd
 	eor .input
 	sta .input
 .getspell
-	jsr $ffe4
+	jsr getb
 	cmp #'0'
 	bcc .getspell
 	cmp #'0'+numspells
@@ -236,7 +247,7 @@ parsecmd
 	sta .input
 
 .getcoord
-	jsr $ffe4
+	jsr getb
 	cmp #'A'
 	bcc .getcoord
 	cmp #'A'+VP_W+1
@@ -246,7 +257,7 @@ parsecmd
 	sbc #'A'
 	pha
 
--	jsr $ffe4
+-	jsr getb
 	cmp #'0'
 	bcc -
 	cmp #'9'+1
@@ -266,7 +277,7 @@ parsecmd
 	stx cellpos
 
 .confirmorcancel
-	jsr $ffe4
+	jsr getb
 	beq *-3
 
 	pha
@@ -1020,7 +1031,7 @@ shop
 	ldx #<shopmsg
 	ldy #>shopmsg
 	jsr msgputs
--	jsr $ffe4
+-	jsr getb
 	cmp #$00
 	beq -
 	cmp #'R'
@@ -1052,7 +1063,7 @@ shop
 	lda #'?'
 	jsr $ffd2
 
--	jsr $ffe4
+-	jsr getb
 	cmp #$00
 	beq -
 	cmp #'Y'
@@ -1331,6 +1342,7 @@ puts
 	stx tmp0
 	sty tmp0+1
 	ldy #$00
+	inc $cc
 -	lda (tmp0),y
 	beq +
 	jsr $ffd2
@@ -1380,8 +1392,7 @@ msgputs
 	sty tmp5
 	jsr scrollmsg
 	ldx #MSG_LINE+MSG_H-1
-	ldy #$00
-	jsr $e50c
+	jsr setrow
 	ldx tmp4
 	ldy tmp5
 	jmp puts
@@ -1763,25 +1774,25 @@ WING2=SCREEN_W*2-2
 
 ;**************************************
 getname
-	lda #$00
-	tax
--	sta $9600,x
+	ldx #$00
+-	lda #$00
+	sta $9600,x
 	sta $9700,x
 	sta $100,x
+	lda #$01
+	sta $9700+<titleend-1,x
 	dex
 	bne -
 
-	ldx #(SCREEN+(SCREEN_W*SCREEN_H)-titleend)+1
-	lda #$01
--	sta $9700+<titleend-1,x
+	ldx #7
+	lda #$20
+-	sta SCREEN+(SCREEN_W*17),x
 	dex
-	bne -
+	bpl -
 
 	lda #$90	; black
 	jsr $ffd2
-
 	ldx #17
-	ldy #0
 	jsr $e50c
 -	lda SCREEN+WING1
 	eor #$1f
@@ -1791,16 +1802,13 @@ getname
 	sta SCREEN+WING2
 	jsr middelay
 
-	jsr $ffe4
-	cmp #$00
-	beq -
+	jsr getb
 	cmp #$0d
 	beq .storename
 	jsr $ffd2
 
 	; validate/update cursor pos
-	sec
-	jsr $fff0
+	jsr $e513
 	cpy #7
 	bne +
 	dey
@@ -1808,14 +1816,11 @@ getname
 +	bcc +
 	ldy #0
 +	ldx #17
-	clc
-	jsr $fff0
-
+	jsr $e50c
 	jmp -
 
 .storename
-	sec
-	jsr $fff0
+	jsr $e513
 	dey
 -	lda SCREEN+(SCREEN_W*17),y
 	clc

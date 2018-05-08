@@ -27,3 +27,14 @@ Spells are provided by typing the number of the spell. Spells are numbered
 from 0-4.
 
 To confirm a command, press `<RETURN>`.
+
+### Tips
+Level up by defeating enemies to increase your damage and health.
+
+Be careful when TAKE'ing traps (`?`'s). They may contain health or magick, but 
+they may be traps!  You can use the `EYE` spell to de-trap them if you don't
+want to take chances.
+
+You may happen upon a shop instead of a room on occasion. Here you can spend
+money acquired on your travels to buy armor, weapons, spells, health, and 
+magick.

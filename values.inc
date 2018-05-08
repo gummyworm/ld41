@@ -79,6 +79,9 @@ CH_GEM=$5a
 GC_TRAP=6
 CH_TRAP=63
 
+GC_SCROLL=7
+CH_SCROLL=88
+
 MAX_ENEMIES=2
 
 ;**************************************

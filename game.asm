@@ -222,11 +222,19 @@ parsecmd
 	sbc #'0'
 	asl
 	tax
-	sta spell
-	lda spellnames,x
-	ldy spellnames+1,x
-	tax
-	jsr puts
+	tay
+
+	; check if player has learned selected spell
+	lda #$00
+	sec
+-	rol
+	dey
+	bpl -
+	and learnedspells
+	beq .getspell
+
+	stx spell
+	jsr putsspell
 	jsr space
 	jmp cast
 .chkhit
@@ -355,6 +363,9 @@ parsecmd
 +	cmp #CH_TRAP
 	bne +
 	ldy #TRAP_IDX
++	cmp #CH_SCROLL
+	bne +
+	ldy #SCROLL_IDX
 +	lda VIEWPORT_COL,x
 	and #$0f
 	beq ++	; black= not enemy, !black= enemy
@@ -371,11 +382,13 @@ parsecmd
 	tax
 	lda .action
 	cmp #'H'
+	bne ++
+	cpy #ENEMY_IDX
 	bne +
-	lda hittab,x
-	ldy hittab+1,x
-	bne .exec
-+	cmp #'T'
+	jmp hiterr
++	jmp hitenemy
+
+++	cmp #'T'
 	bne .exec
 	lda taketab,x
 	ldy taketab+1,x
@@ -394,6 +407,7 @@ SPELL_IDX = 2
 GEM_IDX = 3
 MONEY_IDX = 4
 TRAP_IDX = 5
+SCROLL_IDX = 6
 
 taketab
 !word takeheart
@@ -402,14 +416,7 @@ taketab
 !word takegem
 !word takemoney
 !word taketrap
-
-hittab
-!word hiterr
-!word hitenemy
-!word hiterr
-!word hiterr
-!word hiterr
-!word hiterr
+!word takescroll
 
 ;**************************************
 cmderr
@@ -422,6 +429,7 @@ clrcell
 	ldx cellpos
 	sta VIEWPORT,x
 	jmp sfx_take
+
 takeheart
 	ldx #4
 	jsr rnd
@@ -433,10 +441,12 @@ takeheart
 	lda #115
 	jsr printtake
 	jmp clrcell
+
 takeenemy
 	ldx #<canttake
 	ldy #>canttake
 	jmp cmderr
+
 takegem
 	inc gemcnt
 	lda gemcnt
@@ -447,18 +457,21 @@ takegem
 	lda #CH_GEM
 	jsr printtake
 	jmp clrcell
+
 takespell
 	inc magick
 	ldx #1
 	lda #CH_SPELL
 	jsr printtake
 	jmp clrcell
+
 takemoney
 	inc money
 	ldx #1
 	lda #CH_MONEY
 	jsr printtake
 	jmp clrcell
+
 taketrap
 	ldx #<openboxmsg
 	ldy #>openboxmsg
@@ -480,6 +493,31 @@ taketrap
 	jsr msgputs
 	adc #TRAP_DMG
 	jsr harmplayer
+	jmp clrcell
+
+takescroll
+	ldx #3
+	jsr rnd
+	ldx result
+	cpx #numspells
+	bcs takescroll
+
+	sec
+	lda #$00
+-	rol
+	dex
+	bpl -
+	ora learnedspells
+	sta learnedspells
+
+	ldx #<learnedmsg
+	ldy #>learnedmsg
+	jsr msgputs
+
+	lda result
+	asl
+	tax
+	jsr putsspell
 	jmp clrcell
 
 ;**************************************
@@ -606,6 +644,7 @@ gencell_notrap
 	+GENCELL GC_HEART, CH_HEART, .next
 	+GENCELL GC_SPELL, CH_SPELL, .next
 	+GENCELL GC_MONEY, CH_MONEY, .next
+	+GENCELL GC_SCROLL, CH_SCROLL, .next
 	+GENCELL2 GC_GEM, CH_GEM, .next
 .next   rts
 
@@ -827,6 +866,14 @@ getenemyname
 	lda enemynametab,x
 	ldy enemynametab+1,x
 	tax
+	rts
+
+;**************************************
+putsspell
+	lda spellnames,x
+	ldy spellnames+1,x
+	tax
+	jsr puts
 	rts
 
 ;**************************************
@@ -1743,6 +1790,7 @@ flashname !pet "flash",0
 eyename !pet "eye",0
 skinname !pet "skin",0
 
+learnedmsg !pet "you learned ",0
 nomanamsg !pet "no mana",0
 
 storemsg !pet "shop",0

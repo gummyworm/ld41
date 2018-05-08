@@ -37,6 +37,7 @@ xp = $133
 gemcnt = $134
 money = $135
 armor = $136
+learnedspells = $137
 zerodatalen=name-zerodata
 
 name = $139

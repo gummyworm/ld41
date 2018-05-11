@@ -201,7 +201,8 @@ parsecmd
 	bne .chkcast
 	ldx #<take
 	ldy #>take
-	bne .printaction
+	beq .chkcast
+	jmp .printaction
 
 .chkcast
 	cpy #'C'
@@ -239,11 +240,38 @@ parsecmd
 	jmp cast
 .chkhit
 	cpy #'H'
-	bne +
+	beq .confirmhit
+	jmp parsecmd
+
+.confirmhit
+	; highlight random cells until the player confirms a "HIT"
 	ldx #<hit
 	ldy #>hit
-	bne .printaction
-+	jmp parsecmd	; invalid character
+	jsr puts
+--	ldx #3
+	jsr rnd
+	lda result
+	pha
+	ldx #3
+	jsr rnd
+	ldy result
+	pla
+	tax
+	jsr getcell
+	stx cellpos
+	jsr hicell
+	lda #40
+	sta tmp0
+-	lda #$3f
+	lda $9004
+	bne *-3
+	jsr $ffe4
+	cmp #$0d
+	beq .doaction2
+	dec tmp0
+	bne -
+	jsr unhicell
+	jmp --
 
 .printaction
 	stx tmp0
@@ -281,21 +309,22 @@ parsecmd
 
 	jsr getcell
 	stx cellpos
-	pha
 	jsr hicell
 
 .confirmorcancel
 	jsr getb
 
+.doaction2
 	pha
 	jsr unhicell	; unhighlight
 	pla
 
-	cmp #$0d
-	beq .doaction
 	cmp #$14
-	bne .checkmove
-	jmp parsecmd	; player cancelled action
+	bne +
+.parsecmd2
+	jmp parsecmd
++	cmp #$0d
+	beq .doaction
 
 .checkmove
 	ldx .col
@@ -343,12 +372,10 @@ parsecmd
 	bne ++
 +	ldx #<nothingmsg
 	ldy #>nothingmsg
-	pla
 	jmp msgputs
 
 	; get the type of cell that the action applies to (heart, enemy, etc.)
-++	pla
-	cmp #CH_HEART
+++	cmp #CH_HEART
 	bne +
 	ldy #HEART_IDX
 +	cmp #CH_GEM
@@ -1546,8 +1573,7 @@ longdelay
 	!byte $2c
 verylongdelay
 	ldy #VLONG_DELAY
-	lda #10
--	cmp $9004
+-	lda $9004
 	bne *-3
 	dey
 	bne -
@@ -1757,17 +1783,17 @@ statusxp    !pet " xp:",0
 statusarmor !pet 113,":",0
 statusdmg   !pet 97,":",0
 
-runmsg !pet "you ran away!",0
-runfailmsg !pet "couldn't get away!",0
+runmsg !pet "escaped!",0
+runfailmsg !pet "couldn't escape!",0
 takesmsg !pet " takes ",0
-openboxmsg !pet "you open the box...",0
-trappedmsg !pet "it was trapped!",0
+openboxmsg !pet "open the box",0
+trappedmsg !pet "trapped!",0
 armormsg !pet "armor",0
 shopmsg !pet "buy somethin'?",0
 confirmmsg !pet "buy the ",0
 notenoughmoneymsg !pet "not enough $!",0
 okmsg !pet "ok",0
-thankyoumsg !pet "thank you!",0
+thankyoumsg !pet "thanks!",0
 
 spelltab
 !word starfall
@@ -1790,14 +1816,14 @@ flashname !pet "flash",0
 eyename !pet "eye",0
 skinname !pet "skin",0
 
-learnedmsg !pet "you learned ",0
+learnedmsg !pet "learned ",0
 nomanamsg !pet "no mana",0
 
 storemsg !pet "shop",0
 byemsg !pet "bye",0
-staresmsg !pet "stares at you",0
-invisinroommsg !pet "you sense an evil",0
-spellendsmsg !pet "your spell ends"
+staresmsg !pet "glares",0
+invisinroommsg !pet "uh oh",0
+spellendsmsg !pet "spell ends"
 
 hp !byte 100
 magick !byte 100

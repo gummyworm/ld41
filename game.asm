@@ -226,12 +226,7 @@ parsecmd
 	tay
 
 	; check if player has learned selected spell
-	lda #$00
-	sec
--	rol
-	dey
-	bpl -
-	and learnedspells
+	jsr knows
 	beq .getspell
 
 	stx spell
@@ -262,12 +257,11 @@ parsecmd
 	jsr hicell
 	lda #40
 	sta tmp0
--	lda #$3f
-	lda $9004
-	bne *-3
-	jsr $ffe4
+-	jsr $ffe4
 	cmp #$0d
 	beq .doaction2
+	lda $9004
+	bne -
 	dec tmp0
 	bne -
 	jsr unhicell
@@ -548,12 +542,25 @@ takescroll
 	jmp clrcell
 
 ;**************************************
-cast
-	ldx #<castmsg
-	ldy #>castmsg
-	jsr msgputs
+; .Z flag set if cleared if player knows spell #(.Y)
+knows
+	; check if player has learned selected spell
+	lda #$00
+	sec
+-	rol
+	dey
+	bpl -
+	and learnedspells
+	rts
 
-	;jsr sfx_spell2
+;**************************************
+cast
+	ldx spell
+	lda spellnames,x
+	ldy spellnames+1,x
+	tax
+	jsr msgputs
+	jsr exclaim
 
 	ldx spell
 	lda spelltab,x
@@ -877,6 +884,7 @@ scrollmsg
 	dec tmp0
 	bne --
 	jmp clrmsg
+
 
 ;**************************************
 msgputsenemy
@@ -1384,9 +1392,35 @@ drawstatus
 	jsr puts
 	lda xp
 	jsr putb
+	ldx #SCREEN_W-1
+-	lda SCREEN+(SCREEN_W*LEVEL_LINE),x
+	ora #$80
+	sta SCREEN+(SCREEN_W*LEVEL_LINE),x
+	dex
+	bpl -
+
+	; draw known spells
+	lda #SPELL_LINE+4
+	sta tmp3
+	ldy #5
+	sty tmp2
+
+-	ldx tmp3
+	jsr setrow
+	dec tmp3
+	dec tmp2
+	bmi +
+	ldy tmp2
+	jsr knows
+	beq -
+	lda tmp2
+	asl
+	tax
+	jsr putsspell
+	jmp -
 
 	; draw the gems that the player has
-	ldx gemcnt
++	ldx gemcnt
 	beq +
 -	lda #CH_GEM
 	sta SCREEN,x
@@ -1746,30 +1780,29 @@ eyefn
 ; data
 !zone data
 
-diemsg !pet $90,"you have died!"
+diemsg !pet $90,"you died!"
 diemsglen=*-diemsg
 
-harmmsg1 !pet "you receive ",0
+harmmsg1 !pet "took ",0
 damagemsg !pet " damage!",0
 
-hurtmsg !pet "you hit the ",0
+hurtmsg !pet "you hit ",0
 attacksmsg !pet "attacks!",0
-castmsg !pet "you cast a spell",0
 killmsg !pet "you kill the ",0
 takemsg !pet "picked up ",0
 gainedmsg !pet "gained ",0
 xpmsg !pet "xp",0
 
-canttake !pet "you can't take that!",0
-canttarget !pet "not a valid target!",0
+canttake !pet "can't take!",0
+canttarget !pet "invalid target!",0
 
 winmsg
 !pet $05,"congratulations!",$0d
-!pet "you have collected 3",$0d,"gems. "
+!pet "you collected 3",$0d,"gems. "
 !pet "now power may berestored at last to",$0d,"the magic staff",0
 
 nothingmsg
-!pet "there is nothing there",0
+!pet "miss!",0
 
 statusmsg
 statusmsg1 !pet 115,":",0
@@ -1789,7 +1822,7 @@ takesmsg !pet " takes ",0
 openboxmsg !pet "open the box",0
 trappedmsg !pet "trapped!",0
 armormsg !pet "armor",0
-shopmsg !pet "buy somethin'?",0
+shopmsg !pet "welcome!",0
 confirmmsg !pet "buy the ",0
 notenoughmoneymsg !pet "not enough $!",0
 okmsg !pet "ok",0
@@ -1821,7 +1854,7 @@ nomanamsg !pet "no mana",0
 
 storemsg !pet "shop",0
 byemsg !pet "bye",0
-staresmsg !pet "glares",0
+staresmsg !pet "waits",0
 invisinroommsg !pet "uh oh",0
 spellendsmsg !pet "spell ends"
 
@@ -1872,6 +1905,12 @@ WING2=SCREEN_W*2-2
 
 ;**************************************
 getname
+	ldx #17
+	jsr $e50c
+
+	ldx #$00
+	stx enemy_idx
+	stx $cc
 -	lda #$00
 	sta $9600,x
 	sta $9700,x
@@ -1881,6 +1920,11 @@ getname
 	dex
 	bne -
 
+	ldx #<irq
+	ldy #>irq
+	stx $0314
+	sty $0315
+
 	ldx #7
 	lda #$20
 -	sta SCREEN+(SCREEN_W*17),x
@@ -1889,54 +1933,46 @@ getname
 
 	lda #$90	; black
 	jsr $ffd2
-	ldx #17
-	jsr $e50c
--	lda SCREEN+WING1
-	eor #$1f
-	sta SCREEN+WING1
-	lda SCREEN+WING2
-	eor #$02
-	sta SCREEN+WING2
-	jsr middelay
 
-	ldx #$00
-	stx $cc
-	jsr $ffe4
-	beq -
+.gets	jsr $ffe4
 	cmp #$0d
-	beq .storename
-	jsr $ffd2
-
-	; validate/update cursor pos
-	jsr $e513
-	cpy #7
-	bne +
-	dey
-	clc
-+	bcc +
-	ldy #0
-+	ldx #17
-	jsr $e50c
-	jmp -
+	bne .putch
 
 .storename
-	jsr $e513
-	dey
+	ldy #7
 -	lda SCREEN+(SCREEN_W*17),y
 	clc
 	adc #'A'-1
 	sta name,y
 	dey
 	bpl -
-	lda #$00
-	sta name+7
-	sta enemy_idx
 
-	; srand
-	lda $9004
-	sta rndval
-	jsr rnd
-	sta rndval+1
+	jsr $fd52
 	jmp start
+
+.putch
+	jsr $ffd2
+	; validate/update cursor pos
+	jsr $e513
+	tya
+	and #$07
+	tay
+	ldx #17
+	jsr $e50c
+	jmp .gets
+
+irq
+	inc rndval
+	dec tmp1
+	bne +
+	lda #10
+	sta tmp1
+	lda SCREEN+WING1
+	eor #$1f
+	sta SCREEN+WING1
+	lda SCREEN+WING2
+	eor #$02
+	sta SCREEN+WING2
++	jmp $eabf
 
 titlecodeend=*

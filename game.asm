@@ -221,15 +221,13 @@ parsecmd
 	bcs .getspell
 	sec
 	sbc #'0'
-	asl
-	tax
+	sta spell
 	tay
 
 	; check if player has learned selected spell
 	jsr knows
 	beq .getspell
 
-	stx spell
 	jsr putsspell
 	jsr space
 	jmp cast
@@ -536,8 +534,7 @@ takescroll
 	jsr msgputs
 
 	lda result
-	asl
-	tax
+	sta spell
 	jsr putsspell
 	jmp clrcell
 
@@ -555,20 +552,18 @@ knows
 
 ;**************************************
 cast
-	ldx spell
-	lda spellnames,x
-	ldy spellnames+1,x
-	tax
-	jsr msgputs
+	jsr scrollmsg
+	ldx #MSG_LINE+MSG_H-1
+	jsr setrow
+	jsr putsspell
 	jsr exclaim
 
-	ldx spell
+	lda spell
+	asl
+	tax
 	lda spelltab,x
-	sta .anim
-	lda spelltab+1,x
-	sta .anim+1
-.anim=*+1
-	jmp $ffff
+	ldy spelltab+1,x
+	jmp callya
 
 ;**************************************
 hiterr
@@ -905,6 +900,9 @@ getenemyname
 
 ;**************************************
 putsspell
+	lda spell
+	asl
+	tax
 	lda spellnames,x
 	ldy spellnames+1,x
 	tax
@@ -1402,22 +1400,22 @@ drawstatus
 	; draw known spells
 	lda #SPELL_LINE+4
 	sta tmp3
-	ldy #5
-	sty tmp2
+	ldy #numspells-1
+	sty spell
 
 -	ldx tmp3
 	jsr setrow
 	dec tmp3
-	dec tmp2
-	bmi +
-	ldy tmp2
+	ldy spell
 	jsr knows
-	beq -
-	lda tmp2
-	asl
-	tax
+	beq +
+	jsr rvson
+	lda spell
+	jsr putb
+	jsr rvsoff
 	jsr putsspell
-	jmp -
++	dec spell
+	bpl -
 
 	; draw the gems that the player has
 +	ldx gemcnt
@@ -1502,6 +1500,7 @@ msgputs
 	jsr setrow
 	ldx tmp4
 	ldy tmp5
+
 	jmp puts
 
 ;**************************************
@@ -1941,9 +1940,10 @@ getname
 .storename
 	ldy #7
 -	lda SCREEN+(SCREEN_W*17),y
-	clc
+	cmp #$19
+	bcs +
 	adc #'A'-1
-	sta name,y
++	sta name,y
 	dey
 	bpl -
 

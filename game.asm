@@ -100,19 +100,6 @@ src=tmp2
 	rts
 
 ;**************************************
-addenemy
-	ldx #MAX_ENEMIES
--	lda enemy_dmg,x
-	sta enemy_dmg+1,x
-	lda enemy_w,x
-	sta enemy_w+1,x
-	lda enemy_h,x
-	sta enemy_h+1,x
-	lda enemy_hp,x
-	sta enemy_hp+1,x
-	rts
-
-;**************************************
 enemymove
 	ldx #0
 	stx enemy_idx
@@ -290,7 +277,11 @@ parsecmd
 	pha
 
 -	jsr getb
-	cmp #'0'
+	cmp #$14
+	bne +
+	pla
+	jmp parsecmd
++	cmp #'0'
 	bcc -
 	cmp #'9'+1
 	bcs -
@@ -370,52 +361,54 @@ parsecmd
 	ldy #>nothingmsg
 	jmp msgputs
 
+++	ldy .action
+	cpy #'H'
+	beq .hit
+
 	; get the type of cell that the action applies to (heart, enemy, etc.)
-++	cmp #CH_HEART
+	cmp #CH_HEART
 	bne +
-	ldy #HEART_IDX
+	jmp takeheart
 +	cmp #CH_GEM
 	bne +
-	ldy #GEM_IDX
+	jmp takegem
 +	cmp #CH_SPELL
 	bne +
-	ldy #SPELL_IDX
+	jmp takespell
 +	cmp #CH_MONEY
 	bne +
-	ldy #MONEY_IDX
+	jmp takemoney
 +	cmp #CH_TRAP
 	bne +
-	ldy #TRAP_IDX
+	jmp taketrap
 +	cmp #CH_SCROLL
 	bne +
-	ldy #SCROLL_IDX
-+	lda VIEWPORT_COL,x
+	jmp takescroll
++
+	jmp *
+	jmp takeenemy
+
+.hit    ; check if the player hit an enemy
+	lda VIEWPORT_COL,x
 	and #$0f
-	beq ++	; black= not enemy, !black= enemy
+	beq hiterr ; black= not enemy, !black= enemy
 	ldy #$01
 	cpx #SKY_ENEMY_MAXPOS
 	bcc +
 	dey
 +	sty enemy_idx
-	ldy #ENEMY_IDX
-
-	; look up the handler for the action and cell type
-++	tya
-	asl
-	tax
-	lda .action
-	cmp #'H'
-	bne ++
-	cpy #ENEMY_IDX
-	bne +
-	jmp hiterr
-+	jmp hitenemy
-
-++	cmp #'T'
-	bne .exec
-	lda taketab,x
-	ldy taketab+1,x
-.exec	jmp callya
+;**************************************
+hitenemy
+	ldx #<hurtmsg
+	ldy #>hurtmsg
+	jsr msgputs
+	jsr putsenemy
+	jsr sfx_hit
+	ldx dmg
+	jsr rnd
+	lda result
+	adc basedmg
+	jmp harmenemy
 
 take
 !pet "take",0
@@ -432,14 +425,11 @@ MONEY_IDX = 4
 TRAP_IDX = 5
 SCROLL_IDX = 6
 
-taketab
-!word takeheart
-!word takeenemy
-!word takespell
-!word takegem
-!word takemoney
-!word taketrap
-!word takescroll
+;**************************************
+hiterr
+	ldx #<canttarget
+	ldy #>canttarget
+	jmp cmderr
 
 ;**************************************
 cmderr
@@ -568,23 +558,6 @@ cast
 	lda spelltab,x
 	ldy spelltab+1,x
 	jmp callya
-
-;**************************************
-hiterr
-	ldx #<canttarget
-	ldy #>canttarget
-	jmp cmderr
-hitenemy
-	ldx #<hurtmsg
-	ldy #>hurtmsg
-	jsr msgputs
-	jsr putsenemy
-	jsr sfx_hit
-	ldx dmg
-	jsr rnd
-	lda result
-	adc basedmg
-	jmp harmenemy
 
 ;**************************************
 ; setcell sets the cell at the given (row,col) position to the value in .A
@@ -1342,6 +1315,7 @@ drawstatus
 	jsr puts
 	lda hp
 	jsr putb
+	jsr space
 
 	; draw magick
 	ldx #STATUS_LINE+1
@@ -1351,6 +1325,7 @@ drawstatus
 	jsr puts
 	lda magick
 	jsr putb
+	jsr space
 
 	; draw armor and attack damage
 	ldx #STATUS_LINE+2
@@ -1442,8 +1417,14 @@ drawstatus
 
 .done	rts
 
+
 ;**************************************
-puts
+slowputs
+	lda #$20
+	!byte $2c
+;**************************************
+puts	lda #$2c
+	sta .dly
 	stx tmp0
 	sty tmp0+1
 	ldy #$00
@@ -1451,6 +1432,11 @@ puts
 -	lda (tmp0),y
 	beq +
 	jsr $ffd2
+	tya
+	pha
+.dly    jsr shortdelay
+	pla
+	tay
 	iny
 	bne -
 +	rts
@@ -1501,7 +1487,7 @@ msgputs
 	ldx tmp4
 	ldy tmp5
 
-	jmp puts
+	jmp slowputs
 
 ;**************************************
 ; swordrain does large damage to all enemies
@@ -1606,7 +1592,7 @@ longdelay
 	!byte $2c
 verylongdelay
 	ldy #VLONG_DELAY
--	lda $9004
+-       cpy $9004
 	bne *-3
 	dey
 	bne -
@@ -1818,7 +1804,7 @@ statusdmg   !pet 97,":",0
 runmsg !pet "escaped!",0
 runfailmsg !pet "couldn't escape!",0
 takesmsg !pet " takes ",0
-openboxmsg !pet "open the box",0
+openboxmsg !pet "...",0
 trappedmsg !pet "trapped!",0
 armormsg !pet "armor",0
 shopmsg !pet "welcome!",0

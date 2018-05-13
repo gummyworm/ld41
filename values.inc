@@ -22,10 +22,10 @@ MAX_FOR_SALE=6
 
 ;**************************************
 ; delays
-SHORT_DELAY=10
-MID_DELAY=40
-LONG_DELAY=90
-VLONG_DELAY=$ff
+SHORT_DELAY=5
+MID_DELAY=10
+LONG_DELAY=30
+VLONG_DELAY=50
 
 ;**************************************
 ; memory locations/layout

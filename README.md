@@ -1,34 +1,36 @@
 # Wild Green
-### An adventure RPG for the Commodore Vic-20.
+## An adventure RPG for the Commodore Vic-20.
 
-![ScreenShot](screenshot.png) ![ScreenShot](screenshot2.png)
+![ScreenShot](screenshot1.png) ![ScreenShot](screenshot0.png)
 
-### System Requirements
+## System Requirements
 Unexpanded Commodore Vic-20 (PAL/NTSC).
 
-### Instructions
+## Instructions
 You must collect 3 gems of power to gain the power to destroy the cursed Castle
 Wild Green.
 
-Commands are issued by typing one of the following characters:
+## Commands
+You issue a command by typing the character of the corresponding command. Valid
+commands are listed below.
 
- | command | Description                                                            |
- | ------- | ---------------------------------------------------------------------- |
- | T       | take the object at the target location                                 |
- | H       | hit the given target                                                   |
- | R       | run from enemies to the next room (always succeeds if room is cleared) |
- | C       | cast the given spell                                                   |
+### Take (T)
+To take an object, you provide a coordinate as a row/column position represented 
+by the onscreen grid. For example, "A1" refers to row 1, column 1. "A3" 
+represents row 3, column 1. You can use the cursor keys to adjust the target.
 
-Targets are provided as coordinates as row/column positions represented by the
-onscreen grid. For example, "A1" refers to row 1, column 1. "A3" represents
-row 3, column 1. You can use the cursor keys to adjust the target.
-
+### Cast (C)
 Spells are provided by typing the number of the spell. Spells are numbered
-from 0-4.
+from 0-4.  You can learn spells by picking up `♣`'s.
 
-To confirm a command, press `<RETURN>`.
+### Hit (H)
+Hitting a target randomly moves a cursor around the screen.  Try to press 
+RETURN when the cursor is over the enemy you wish to strike.
 
-### Tips
+### Run (R)
+Running may not always succeed.  If you fail to run, you will lose a turn.
+
+## Tips
 Level up by defeating enemies to increase your damage and health.
 
 Be careful when TAKE'ing traps (`?`'s). They may contain health or magick, but 

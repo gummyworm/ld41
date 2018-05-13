@@ -1306,6 +1306,7 @@ drawstatus
 	ldx #<name
 	ldy #>name
 	jsr puts
+	jsr space
 
 	; draw HP
 	ldx #STATUS_LINE

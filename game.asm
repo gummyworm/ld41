@@ -14,7 +14,6 @@ basicstub
 	jmp getname
 start
 	jsr clearall
-	jsr drawstatus
 	jsr genscreen
 mainloop
 	lda armorturns
@@ -201,7 +200,6 @@ parsecmd
 	bne .chkcast
 	ldx #<take
 	ldy #>take
-	beq .chkcast
 	jmp .printaction
 
 .chkcast
@@ -215,6 +213,8 @@ parsecmd
 	sta .input
 .getspell
 	jsr getb
+	cmp #$14
+	beq parsecmd
 	cmp #'0'
 	bcc .getspell
 	cmp #'0'+numspells
@@ -256,6 +256,8 @@ parsecmd
 	lda #40
 	sta tmp0
 -	jsr $ffe4
+	cmp #$14
+	beq .doaction2
 	cmp #$0d
 	beq .doaction2
 	lda $9004
@@ -276,6 +278,8 @@ parsecmd
 
 .getcoord
 	jsr getb
+	cmp #$14
+	beq .parsecmd2
 	cmp #'A'
 	bcc .getcoord
 	cmp #'A'+VP_W+1
@@ -1297,36 +1301,32 @@ clear
 
 ;**************************************
 drawui
-	ldx #VP_W+1	; 'A'-'J'
+	ldy #10
+	ldx #(VP_W+1)|$80	; 'A'-'J'
 -	txa
-	sta SCREEN+VP_X-1,x
-	lda #$06
-	sta COLORMEM+VP_X-1,x
+	sta SCREEN+VP_X-$80-1,x
+	lda #$06+$80
+	sta COLORMEM+VP_X-$80-1,x
 	dex
+	dey
 	bne -
 
 	ldy #$00
-	ldx #48
-	clc
+	ldx #48|$80
 -	txa
 	sta SCREEN+SCREEN_W+VP_X-1,y
 	tya
+	clc
 	adc #SCREEN_W
 	tay
 	inx
-	cpx #48+10
+	cpx #48|$80+10
 	bcc -
 	rts
 
 ;**************************************
 ; draw the player status (health/magic/money)
 drawstatus
-	ldx #SCREEN_W
-	lda #' '
--	sta SCREEN+(SCREEN_W*STATUS_LINE),x
-	dex
-	bpl -
-
 	; draw name
 	ldx #STATUS_LINE-1
 	jsr setrow
@@ -1938,6 +1938,7 @@ getname
 	bne .putch
 
 .storename
+	sta $cc
 	ldy #7
 -	lda SCREEN+(SCREEN_W*17),y
 	cmp #$19

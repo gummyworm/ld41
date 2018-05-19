@@ -68,10 +68,8 @@ src=tmp2
 	ldx #2
 	jsr rnd
 	lda result
-	sta enemy_dmg
-	ldx #2
-	jsr rnd
-	lda result
+	pha
+	pha
 
 .index=*+1
 	ldx #$00
@@ -85,12 +83,12 @@ src=tmp2
 	sta height
 	sta enemy_h,x
 	iny
-	lda (src),y
-	adc enemy_hp
+	pla
+	adc (src),y
 	sta enemy_hp,x
 	iny
-	lda (src),y
-	adc enemy_dmg
+	pla
+	adc (src),y
 	sta enemy_dmg,x
 	iny
 	lda (src),y
@@ -703,14 +701,17 @@ genscreen
 	lda #MAX_ENEMIES-1
 	sta .enemycnt
 .genenemy
-	lda .enemycnt
-	pha
+	ldx #2
+	jsr rnd
+	lda result
+	cmp #NUM_ENEMIES
+	bcs .genenemy
 	asl
 	tax
 	lda enemiestab,x
 	ldy enemiestab+1,x
 	tax
-	pla
+	lda .enemycnt
 	jsr loadenemy
 
 	; get destination to draw for ground enemy
@@ -773,8 +774,9 @@ genscreen
 +	rts
 
 enemiestab
-!word gfx_snake
+!word gfx_warlock
 !word gfx_bat
+!word gfx_snake
 
 colors
 !byte 2
@@ -1853,10 +1855,12 @@ spelldmg !byte 5 ; spell max damage (2^n)
 enemynametab
 !word snakename
 !word batname
+!word warlockname
 
 enemynames
 snakename !pet "snake",0
 batname !pet "bat",0
+warlockname !pet "witch",0
 
 ; graphics
 gfx_snake
@@ -1875,6 +1879,16 @@ gfx_bat
 !byte  1	; name index
 !byte  233,223,223,233,233,223,105,95
 !byte  174,174,105,95,32,32,34,34,32,32
+
+gfx_warlock
+!byte 3,4	; 3x4
+!byte 6
+!byte 10
+!byte 2
+!byte  $58,$51,$20,$6B,$E0,$74,$5D,$E0
+!byte  $F6,$5D,$A0,$FA
+
+
 
 prg_size=*-basicstub
 remaining_bytes=SCREEN - *

@@ -114,12 +114,27 @@ enemymove
 	ldx #2
 	jsr rnd
 	lda result
-.idle	bne .attack
+.idle	bne .cast
 	ldx #<staresmsg
 	ldy #>staresmsg
 	jsr puts
 	jmp .nextenemy
 
+.cast
+	lda enemies,x
+	cmp #ENEMY_WARLOCK
+	bne .attack
+	ldx #2
+	jsr rnd
+	lda result
+	bne .attack
+	ldx #<zapmsg
+	ldy #>zapmsg
+	jsr puts
+	jsr flashanim
+	lda #20
+	jsr harmplayer
+	jmp .nextenemy
 .attack
 	ldx #<attacksmsg
 	ldy #>attacksmsg
@@ -164,7 +179,7 @@ parsecmd
 	lda enemy_hp
 	beq +
 	bpl .run
-+       jsr genlevel
++       jsr genscreen
 	jmp parsecmd
 
 .run	lda $9004
@@ -173,7 +188,7 @@ parsecmd
 	ldx #<runmsg
 	ldy #>runmsg
 	jsr msgputs
-	jsr genlevel
+	jsr genscreen
 	rts
 +	ldx #<runfailmsg
 	ldy #>runfailmsg
@@ -373,9 +388,6 @@ parsecmd
 +	cmp #CH_SPELL
 	bne +
 	jmp takespell
-+	cmp #CH_MONEY
-	bne +
-	jmp takemoney
 +	cmp #CH_TRAP
 	bne +
 	jmp taketrap
@@ -413,13 +425,13 @@ take
 hit
 !pet "hit",0
 castcmd
+castmsg
 !pet "cast ",0
 
 HEART_IDX = 0
 ENEMY_IDX = 1
 SPELL_IDX = 2
 GEM_IDX = 3
-MONEY_IDX = 4
 TRAP_IDX = 5
 SCROLL_IDX = 6
 
@@ -476,13 +488,6 @@ takespell
 	jsr printtake
 	jmp clrcell
 
-takemoney
-	inc money
-	ldx #1
-	lda #CH_MONEY
-	jsr printtake
-	jmp clrcell
-
 taketrap
 	ldx #<openboxmsg
 	ldy #>openboxmsg
@@ -491,10 +496,6 @@ taketrap
 	jsr rnd
 	lda result
 	beq takeheart
-	ldx #2
-	jsr rnd
-	lda result
-	beq takemoney
 	ldx #2
 	jsr rnd
 	lda result
@@ -632,22 +633,11 @@ win
 	jmp *
 
 ;**************************************
-; generate a new level (combat or shop)
-genlevel
-	ldx #1
-	jsr rnd
-	lda result
-	beq .shop
-	jmp genscreen
-.shop   jmp shop
-
-;**************************************
 gencell
 	+GENCELL GC_TRAP, CH_TRAP, .next
 gencell_notrap
 	+GENCELL GC_HEART, CH_HEART, .next
 	+GENCELL GC_SPELL, CH_SPELL, .next
-	+GENCELL GC_MONEY, CH_MONEY, .next
 	+GENCELL GC_SCROLL, CH_SCROLL, .next
 	+GENCELL2 GC_GEM, CH_GEM, .next
 .next   rts
@@ -706,6 +696,8 @@ genscreen
 	lda result
 	cmp #NUM_ENEMIES
 	bcs .genenemy
+	ldx .enemycnt
+	sta enemies,x
 	asl
 	tax
 	lda enemiestab,x
@@ -1001,256 +993,6 @@ die
 	jmp *
 
 ;**************************************
-; enter the shop
-!zone shop
-shop
-; item flags
-.flg_hp=1
-.flg_armor=2
-.flg_weapon=3
-.flg_spell=4
-.flg_magick=5
-.i=tmp2
-.item=tmp3
-.selection=tmp2
-	jsr clear
-	jsr drawstatus
-
-	ldx #$00
-	ldy #STORE_COL
-	jsr $e50c
-	ldx #<storemsg
-	ldy #>storemsg
-	jsr puts
-
-	; get an item to sell
-.l0     lda #$00
-	sta .i
-
-	; determine what item to sell at index .item
--	ldx #3
-	jsr rnd
-	lda result
-	beq -
-
-	cmp #numitems
-	bcs -
-	sta .item
-	ldx .i
-	sta .forsale,x
-	asl
-	tax
-	lda items-2,x
-	ldy items-1,x
-	jsr callya
-
-	lda #STORE_LINE
-	clc
-	adc .i
-	tax
-	ldy #STORE_COL
-	jsr $e50c
-
-	jsr rvson
-	lda .i
-	jsr putb
-	jsr rvsoff
-	jsr space
-
-	; display the item and its cost
-	lda .item
-	asl
-	tax
-	lda .itemnames-2,x
-	ldy .itemnames-1,x
-	tax
-	jsr puts
-	jsr space
-	ldy #SALE_VAL_COL
-	jsr $e50e
-	ldx .i
-	lda .forsale_vals,x
-	jsr putb
-	ldy #COST_COL
-	jsr $e50e
-	ldx .i
-	lda .forsale_costs,x
-	jsr putb
-	lda #'$'
-	jsr $ffd2
-
-	; next row
-	inc .i
-	lda .i
-	cmp #MAX_FOR_SALE
-	bcc -
-
-.getitem
-	ldx #<shopmsg
-	ldy #>shopmsg
-	jsr msgputs
--	jsr getb
-	cmp #$00
-	beq -
-	cmp #'R'
-	bne +
-	ldx #<byemsg
-	ldy #>byemsg
-	jsr msgputs
-	jmp genscreen
-+	sec
-	sbc #'0'
-	bmi -
-	cmp #MAX_FOR_SALE
-	bcs -
-	sta .selection
-.confirm
-	ldx #<confirmmsg
-	ldy #>confirmmsg
-	jsr msgputs
-
-	ldx .selection
-	lda .forsale,x
-	sta .item
-	asl
-	tax
-	lda .itemnames-2,x
-	ldy .itemnames-1,x
-	tax
-	jsr puts
-	lda #'?'
-	jsr $ffd2
-
--	jsr getb
-	cmp #$00
-	beq -
-	cmp #'Y'
-	beq .buy
-	ldx #<okmsg
-	ldy #>okmsg
-	jsr msgputs
-	jmp .getitem
-
-.buy   	ldx .selection
-	lda money
-	cmp .forsale_costs,x
-	bcs +
-	ldx #<notenoughmoneymsg
-	ldy #>notenoughmoneymsg
-	jsr msgputs
-	jmp .getitem
-
-+	lda money
-	sec
-	sbc .forsale_costs,x
-	sta money
-	lda #$00
-	sta .forsale,x
-.clritem
-	lda .selection
-	clc
-	adc #STORE_LINE
-	tax
-	ldy #STORE_COL
-	jsr $e50c
-	ldx #STORE_W
--	jsr space
-	dex
-	bne -
-	ldx #<thankyoumsg
-	ldy #>thankyoumsg
-	jsr msgputs
-
-	ldx .item
-	lda .forsale_vals,x
-	pha
-	lda .item
-	asl
-	tax
-	lda .buytab-2,x
-	ldy .buytab-1,x
-	tax
-	pla
-	jsr callyx
-	jmp .getitem
-
-.health ldx #2
-	jsr rnd
-	lda result
-	adc lvl
-	ldx .i
-	sta .forsale_vals,x
-	adc #HEALTH_COST
-	sta .forsale_costs,x
-	rts
-
-.armor  ldx #2
-	jsr rnd
-	adc result
-	lsr
-	ldx .i
-	sta .forsale_vals,x
-	asl
-	adc #ARMOR_COST
-	asl
-	sta .forsale_costs,x
-	rts
-
-.weapon ldx #2
-	jsr rnd
-	lda lvl
-	adc result
-	ldx .i
-	sta .forsale_vals,x
-	asl
-	adc #WEAPON_COST
-	asl
-	sta .forsale_costs,x
-	rts
-
-.spell  ldx #2
-	jsr rnd
-	adc result
-	ldx .i
-	sta .forsale_vals,x
-	asl
-	asl
-	adc #SPELL_COST
-	sta .forsale_costs,x
-	rts
-
-.buyhealth
-	clc
-	adc hp
-	sta hp
-	rts
-.buyarmor
-	sta unbuffedarmor
-	sta armor
-	rts
-.buysword
-	sta dmg
-	rts
-.buyspell
-	rts
-
-items   !word .health, .armor, .weapon, .spell
-numitems=(*-items)/2
-
-.forsale=freebuff
-.forsale_vals=freebuff+MAX_FOR_SALE
-.forsale_costs=freebuff+MAX_FOR_SALE*2
-
-.itemnames
-!word .item_health, .item_armor, .item_sword, .item_spell
-.buytab
-!word .buyhealth, .buyarmor, .buysword, .buyspell
-.item_health !pet "health",0
-.item_armor !pet "armor",0
-.item_sword !pet "sword",0
-.item_spell !pet "spell",0
-
-;**************************************
 !zone clear
 clearall
 	ldx #$00
@@ -1300,7 +1042,7 @@ drawui
 	rts
 
 ;**************************************
-; draw the player status (health/magic/money)
+; draw the player status (health/magic)
 drawstatus
 	; draw name
 	ldx #STATUS_LINE-1
@@ -1344,15 +1086,6 @@ drawstatus
 	ldy #>statusdmg
 	jsr puts
 	lda basedmg
-	jsr putb
-
-	; draw money
-	ldx #STATUS_LINE+4
-	jsr setrow
-	ldx #<statusmsg3
-	ldy #>statusmsg3
-	jsr puts
-	lda money
 	jsr putb
 
 	; draw XP, level
@@ -1661,6 +1394,7 @@ flash
 	jsr foreachvp
 	jsr longdelay
 	jsr sfx_spell2
+flashanim
 	ldx #<flashfn
 	ldy #>flashfn
 	jmp foreachvp
@@ -1810,11 +1544,7 @@ takesmsg !pet " takes ",0
 openboxmsg !pet "...",0
 trappedmsg !pet "trapped!",0
 armormsg !pet "armor",0
-shopmsg !pet "welcome!",0
-confirmmsg !pet "buy the ",0
-notenoughmoneymsg !pet "not enough $!",0
 okmsg !pet "ok",0
-thankyoumsg !pet "thanks!",0
 
 spelltab
 !word starfall
@@ -1840,8 +1570,7 @@ skinname !pet "skin",0
 learnedmsg !pet "learned ",0
 nomanamsg !pet "no mana",0
 
-storemsg !pet "shop",0
-byemsg !pet "bye",0
+zapmsg !pet "zaps",0
 staresmsg !pet "waits",0
 invisinroommsg !pet "uh oh",0
 spellendsmsg !pet "spell ends"
@@ -1856,6 +1585,9 @@ enemynametab
 !word snakename
 !word batname
 !word warlockname
+
+enemies
+!byte 0,0
 
 enemynames
 snakename !pet "snake",0
@@ -1882,13 +1614,11 @@ gfx_bat
 
 gfx_warlock
 !byte 3,4	; 3x4
-!byte 6
+!byte WARLOCK_DMG
 !byte 10
 !byte 2
 !byte  $58,$51,$20,$6B,$E0,$74,$5D,$E0
 !byte  $F6,$5D,$A0,$FA
-
-
 
 prg_size=*-basicstub
 remaining_bytes=SCREEN - *
